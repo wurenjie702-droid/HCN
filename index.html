@@ -13,6 +13,8 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
     <!-- 引入条形码生成库 -->
     <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
+    <!-- 引入二维码生成库 -->
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
     <!-- 引入 html2canvas 用于解决 PDF 中文乱码问题 -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <!-- 引入 Chart.js 用于图表 -->
@@ -4874,10 +4876,31 @@
                             </div>
 
                             <div class="input-group">
+                                <div class="input-label">标签风格</div>
+                                <select class="input-field" id="label-style">
+                                    <option value="classic">经典风格</option>
+                                    <option value="modern">现代简约</option>
+                                    <option value="compact">紧凑型</option>
+                                    <option value="detailed">详细信息型</option>
+                                    <option value="elegant">优雅渐变</option>
+                                    <option value="bold">粗犷醒目</option>
+                                    <option value="minimal">极简白</option>
+                                </select>
+                            </div>
+
+                            <div class="input-group">
+                                <div class="input-label">码类型</div>
+                                <select class="input-field" id="label-code-type">
+                                    <option value="barcode">条形码</option>
+                                    <option value="qrcode">二维码</option>
+                                    <option value="both">条形码+二维码</option>
+                                </select>
+                            </div>
+
+                            <div class="input-group">
                                 <div class="input-label">选择运单（可选）</div>
                                 <select class="input-field" id="label-shipment-select">
                                     <option value="">-- 不关联运单 --</option>
-                                    <!-- 运单选项由JS动态生成 -->
                                 </select>
                             </div>
 
@@ -7147,7 +7170,8 @@ Content-Type: application/json</pre>
             invoices: 'invoices',
             payments: 'payments',
             inquiryRecords: 'inquiry_records',
-            supplierQuotes: 'supplier_quotes'
+            supplierQuotes: 'supplier_quotes',
+            settings: 'settings'
         };
         const SOFT_DELETE_KEYS = [
             'customers',
@@ -8435,7 +8459,8 @@ Content-Type: application/json</pre>
                     safeSetItem('orders', JSON.stringify(orders));
                 }
                 if (settingsLoaded && Object.keys(newSettings).length > 0) {
-                    settings = newSettings;
+                    const localSettings = JSON.parse(localStorage.getItem('settings') || '{}');
+                    settings = { ...defaultSettings, ...localSettings, ...newSettings };
                     safeSetItem('settings', JSON.stringify(settings));
                 }
                 if (notificationsLoaded) {
@@ -13137,6 +13162,27 @@ Content-Type: application/json</pre>
                         <div class="input-label">备注</div>
                         <textarea id="business-order-notes" class="input-field" rows="2" placeholder="备注信息">${escapeHtml(order.notes || '')}</textarea>
                     </div>
+                    <div class="full-span" style="margin-top: 10px; border-top: 1px solid var(--border); padding-top: 15px;">
+                        <div class="input-label" style="margin-bottom: 10px;"><i class="fas fa-route"></i> 物流轨迹管理</div>
+                        <div style="display: flex; gap: 8px; margin-bottom: 10px;">
+                            <select id="business-order-tracking-status" class="input-field" style="flex: 1;">
+                                <option value="">选择状态...</option>
+                                <option value="pending">待处理</option>
+                                <option value="processing">处理中</option>
+                                <option value="picked-up">已揽收</option>
+                                <option value="shipped">已发货</option>
+                                <option value="in-transit">运输中</option>
+                                <option value="clearance">清关中</option>
+                                <option value="out-for-delivery">派送中</option>
+                                <option value="delivered">已送达</option>
+                                <option value="exception">异常</option>
+                            </select>
+                            <input type="text" id="business-order-tracking-location" class="input-field" style="flex: 1;" placeholder="位置">
+                            <input type="text" id="business-order-tracking-desc" class="input-field" style="flex: 1;" placeholder="描述">
+                            <button class="btn btn-sm btn-primary" onclick="addTrackingEntry('${orderId}', 'business')"><i class="fas fa-plus"></i> 添加</button>
+                        </div>
+                        <div id="business-order-tracking-list" style="max-height: 150px; overflow-y: auto;"></div>
+                    </div>
                 </div>
             `;
             
@@ -13145,8 +13191,7 @@ Content-Type: application/json</pre>
                 { text: '保存', class: 'btn-primary', onclick: `saveBusinessOrder('${orderId}')` }
             ], true);
             
-            // 初始化提成计算
-            setTimeout(() => recalcBusinessOrderCompanyProfit(), 100);
+            setTimeout(() => { recalcBusinessOrderCompanyProfit(); loadOrderTrackingList('${orderId}', 'business'); }, 100);
         }
         
         function updateBusinessOrderProfit() {
@@ -13662,6 +13707,27 @@ Content-Type: application/json</pre>
                         <div class="input-label">备注</div>
                         <textarea id="container-order-notes" class="input-field" rows="2" placeholder="备注信息">${escapeHtml(order.notes || '')}</textarea>
                     </div>
+                    <div class="full-span" style="margin-top: 10px; border-top: 1px solid var(--border); padding-top: 15px;">
+                        <div class="input-label" style="margin-bottom: 10px;"><i class="fas fa-route"></i> 物流轨迹管理</div>
+                        <div style="display: flex; gap: 8px; margin-bottom: 10px;">
+                            <select id="container-order-tracking-status" class="input-field" style="flex: 1;">
+                                <option value="">选择状态...</option>
+                                <option value="pending">待处理</option>
+                                <option value="processing">处理中</option>
+                                <option value="picked-up">已揽收</option>
+                                <option value="shipped">已发货</option>
+                                <option value="in-transit">运输中</option>
+                                <option value="clearance">清关中</option>
+                                <option value="out-for-delivery">派送中</option>
+                                <option value="delivered">已送达</option>
+                                <option value="exception">异常</option>
+                            </select>
+                            <input type="text" id="container-order-tracking-location" class="input-field" style="flex: 1;" placeholder="位置">
+                            <input type="text" id="container-order-tracking-desc" class="input-field" style="flex: 1;" placeholder="描述">
+                            <button class="btn btn-sm btn-primary" onclick="addTrackingEntry('${orderId}', 'container')"><i class="fas fa-plus"></i> 添加</button>
+                        </div>
+                        <div id="container-order-tracking-list" style="max-height: 150px; overflow-y: auto;"></div>
+                    </div>
                 </div>
             `;
             
@@ -13669,6 +13735,8 @@ Content-Type: application/json</pre>
                 { text: '取消', onclick: 'hideModal()' },
                 { text: '保存', class: 'btn-primary', onclick: `saveContainerOrder('${orderId}')` }
             ], true);
+            
+            setTimeout(() => loadOrderTrackingList('${orderId}', 'container'), 100);
         }
 
         function deleteBusinessOrder(orderId) {
@@ -18687,7 +18755,7 @@ Content-Type: application/json</pre>
                         <td>
                             <div>${shipment.description || '未描述'}</div>
                             <div style="font-size: 11px; color: var(--gray-500);">
-                                ${shipment.totalQuantity || 0} 件 / ${(shipment.totalChargeable || 0).toFixed(2)}kg
+                                ${shipment.totalQuantity || 0} 件 / ${(shipment.totalChargeable || 0).toFixed(2)}${settings.weightUnit || 'kg'}
                             </div>
                         </td>
                         <td>
@@ -18731,12 +18799,128 @@ Content-Type: application/json</pre>
             document.getElementById('archive-count').textContent = filteredShipments.length;
         }
 
+        function addTrackingEntry(orderId, orderType) {
+            const statusEl = document.getElementById(`${orderType}-order-tracking-status`);
+            const locationEl = document.getElementById(`${orderType}-order-tracking-location`);
+            const descEl = document.getElementById(`${orderType}-order-tracking-desc`);
+            
+            const status = statusEl.value;
+            const location = locationEl.value.trim();
+            const desc = descEl.value.trim();
+            
+            if (!status) {
+                showNotification('请选择状态', 'error');
+                return;
+            }
+            
+            const entry = {
+                id: generateUUID(),
+                shipmentId: orderId,
+                shipment_id: orderId,
+                orderId: orderId,
+                order_id: orderId,
+                status: status,
+                description: desc,
+                location: location,
+                operator: '管理员',
+                createdAt: new Date().toISOString(),
+                created_at: new Date().toISOString()
+            };
+            
+            trackingHistory.push(entry);
+            saveData('trackingHistory', trackingHistory);
+            
+            const order = orderType === 'business' 
+                ? businessOrders.find(o => o.id === orderId) 
+                : containerOrders.find(o => o.id === orderId);
+            if (order) {
+                order.status = status;
+                order.updatedAt = new Date().toISOString();
+                if (orderType === 'business') {
+                    saveData('businessOrders', businessOrders);
+                } else {
+                    saveData('containerOrders', containerOrders);
+                }
+            }
+            
+            statusEl.value = '';
+            locationEl.value = '';
+            descEl.value = '';
+            
+            loadOrderTrackingList(orderId, orderType);
+            showNotification('轨迹已添加', 'success');
+        }
+        
+        function loadOrderTrackingList(orderId, orderType) {
+            const listEl = document.getElementById(`${orderType}-order-tracking-list`);
+            if (!listEl) return;
+            
+            const entries = trackingHistory.filter(t => 
+                t.shipmentId === orderId || t.shipment_id === orderId || 
+                t.orderId === orderId || t.order_id === orderId
+            ).sort((a, b) => new Date(b.createdAt || b.created_at) - new Date(a.createdAt || a.created_at));
+            
+            const statusMap = {
+                'pending': '待处理', 'processing': '处理中', 'picked-up': '已揽收', 'shipped': '已发货',
+                'in-transit': '运输中', 'clearance': '清关中', 'out-for-delivery': '派送中',
+                'delivered': '已送达', 'returned': '已退回', 'exception': '异常'
+            };
+            
+            if (entries.length === 0) {
+                listEl.innerHTML = '<div style="text-align:center;color:var(--gray-500);padding:10px;font-size:13px;">暂无轨迹记录</div>';
+                return;
+            }
+            
+            listEl.innerHTML = entries.map((entry, idx) => {
+                const statusText = statusMap[entry.status] || entry.status;
+                const time = new Date(entry.createdAt || entry.created_at).toLocaleString('zh-CN');
+                return `
+                    <div style="display:flex;gap:8px;align-items:flex-start;padding:6px 0;${idx < entries.length - 1 ? 'border-bottom:1px solid var(--border);' : ''}">
+                        <div style="width:8px;height:8px;border-radius:50%;background:${idx === 0 ? 'var(--primary)' : 'var(--gray-400)'};margin-top:5px;flex-shrink:0;"></div>
+                        <div style="flex:1;min-width:0;">
+                            <div style="display:flex;justify-content:space-between;align-items:center;">
+                                <span style="font-weight:${idx === 0 ? '600' : 'normal'};color:${idx === 0 ? 'var(--primary)' : 'var(--text)'};font-size:13px;">${statusText}</span>
+                                <span style="font-size:11px;color:var(--gray-500);">${time}</span>
+                            </div>
+                            ${entry.description ? `<div style="font-size:12px;color:var(--gray-600);margin-top:2px;">${entry.description}</div>` : ''}
+                            ${entry.location ? `<div style="font-size:11px;color:var(--gray-500);margin-top:2px;"><i class="fas fa-map-marker-alt"></i> ${entry.location}</div>` : ''}
+                        </div>
+                        <button onclick="deleteTrackingEntry('${entry.id}', '${orderId}', '${orderType}')" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:12px;padding:2px 4px;" title="删除"><i class="fas fa-trash-alt"></i></button>
+                    </div>
+                `;
+            }).join('');
+        }
+        
+        function deleteTrackingEntry(entryId, orderId, orderType) {
+            trackingHistory = trackingHistory.filter(t => t.id !== entryId);
+            saveData('trackingHistory', trackingHistory);
+            loadOrderTrackingList(orderId, orderType);
+            showNotification('轨迹已删除', 'success');
+        }
+
         function updateShipmentStatus(shipmentId, newStatus) {
             const shipment = shipments.find(s => s.id === shipmentId);
             if (shipment) {
+                const oldStatus = shipment.status;
                 shipment.status = newStatus;
                 shipment.updatedAt = new Date().toISOString();
+                
+                const trackingEntry = {
+                    id: generateUUID(),
+                    shipmentId: shipmentId,
+                    shipment_id: shipmentId,
+                    status: newStatus,
+                    description: `状态从 "${oldStatus}" 更新为 "${newStatus}"`,
+                    location: shipment.destination || '',
+                    operator: '系统',
+                    createdAt: new Date().toISOString(),
+                    created_at: new Date().toISOString()
+                };
+                trackingHistory.push(trackingEntry);
+                
                 saveData('shipments', shipments);
+                saveData('trackingHistory', trackingHistory);
+                
                 const statusText = { 'pending': '待处理', 'processing': '处理中', 'picked-up': '已揽收', 'shipped': '已发货', 'in-transit': '运输中', 'clearance': '清关中', 'out-for-delivery': '派送中', 'delivered': '已送达', 'returned': '已退回', 'exception': '异常' }[newStatus] || newStatus;
                 showNotification(`运单 ${shipmentId} 状态已更新为: ${statusText}`, 'success');
                 updateDashboard();
@@ -19147,7 +19331,7 @@ Content-Type: application/json</pre>
                         </div>
                         <div style="font-size: 13px; margin-top: 10px;">
                             <div>尺寸: ${item.length || 0}×${item.width || 0}×${item.height || 0}${item.unit || 'cm'}</div>
-                            <div>重量: ${item.weight || 0}kg | 体积: ${volume.toFixed(4)}m³ | 体积重: ${volumetricWeight.toFixed(2)}kg | 计费重: ${chargeableWeight.toFixed(2)}kg</div>
+                            <div>重量: ${item.weight || 0}${settings.weightUnit || 'kg'} | 体积: ${volume.toFixed(4)}m³ | 体积重: ${volumetricWeight.toFixed(2)}${settings.weightUnit || 'kg'} | 计费重: ${chargeableWeight.toFixed(2)}${settings.weightUnit || 'kg'}</div>
                             ${item.trackingNumber ? `<div>单号: ${item.trackingNumber}</div>` : ''}
                             ${item.description ? `<div>描述: ${item.description}</div>` : ''}
                         </div>
@@ -19166,7 +19350,7 @@ Content-Type: application/json</pre>
                         <div class="grid grid-3">
                             <div style="background: var(--input-bg); padding: 15px; border-radius: var(--radius-md); text-align: center;">
                                 <div style="font-size: 12px; color: var(--gray-500);">成本价</div>
-                                <div style="font-size: 20px; font-weight: 600; margin-top: 5px;">¥${shipment.costData.costPrice.toFixed(2)}/kg</div>
+                                <div style="font-size: 20px; font-weight: 600; margin-top: 5px;">¥${shipment.costData.costPrice.toFixed(2)}/${settings.weightUnit || 'kg'}</div>
                             </div>
                             <div style="background: var(--input-bg); padding: 15px; border-radius: var(--radius-md); text-align: center;">
                                 <div style="font-size: 12px; color: var(--gray-500);">附加费用</div>
@@ -19216,6 +19400,38 @@ Content-Type: application/json</pre>
             };
             const statusText = statusMap[shipment.status] || shipment.status;
 
+            const shipmentTracking = trackingHistory.filter(t => t.shipmentId === shipment.id || t.shipment_id === shipment.id).sort((a, b) => new Date(b.createdAt || b.created_at) - new Date(a.createdAt || a.created_at));
+            
+            let trackingHtml = '';
+            if (shipmentTracking.length > 0) {
+                trackingHtml = `
+                    <div style="margin-top: 20px;">
+                        <div class="input-label">状态历史与物流轨迹</div>
+                        <div style="background: var(--input-bg); padding: 15px; border-radius: var(--radius-md); max-height: 300px; overflow-y: auto;">
+                            ${shipmentTracking.map((track, idx) => {
+                                const trackStatus = statusMap[track.status] || track.status || '状态更新';
+                                const trackTime = new Date(track.createdAt || track.created_at || track.time).toLocaleString();
+                                const isLatest = idx === 0;
+                                return `
+                                    <div style="display: flex; gap: 15px; margin-bottom: 15px; ${idx === shipmentTracking.length - 1 ? '' : 'padding-bottom: 15px; border-bottom: 1px solid var(--border);'}">
+                                        <div style="width: 12px; height: 12px; border-radius: 50%; background: ${isLatest ? 'var(--primary)' : 'var(--gray-400)'}; margin-top: 4px; flex-shrink: 0;"></div>
+                                        <div style="flex: 1;">
+                                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                                <div style="font-weight: ${isLatest ? '600' : 'normal'}; color: ${isLatest ? 'var(--primary)' : 'var(--text)'};">${trackStatus}</div>
+                                                <div style="font-size: 12px; color: var(--gray-500);">${trackTime}</div>
+                                            </div>
+                                            ${track.description || track.message ? `<div style="font-size: 13px; color: var(--gray-600); margin-top: 4px;">${track.description || track.message}</div>` : ''}
+                                            ${track.location ? `<div style="font-size: 12px; color: var(--gray-500); margin-top: 4px;"><i class="fas fa-map-marker-alt"></i> ${track.location}</div>` : ''}
+                                            ${track.operator ? `<div style="font-size: 12px; color: var(--gray-500); margin-top: 4px;"><i class="fas fa-user"></i> ${track.operator}</div>` : ''}
+                                        </div>
+                                    </div>
+                                `;
+                            }).join('')}
+                        </div>
+                    </div>
+                `;
+            }
+
             const content = `
                 <div class="grid grid-2">
                     <div>
@@ -19236,9 +19452,9 @@ Content-Type: application/json</pre>
                         <div style="background: var(--input-bg); padding: 15px; border-radius: var(--radius-md);">
                             <div><strong>总件数:</strong> ${shipment.totalQuantity || 0}</div>
                             <div><strong>总体积:</strong> ${(shipment.totalVolume || 0).toFixed(3)} m³</div>
-                            <div><strong>总重量:</strong> ${(shipment.totalWeight || 0).toFixed(2)} kg</div>
-                            <div><strong>计费重量:</strong> ${(shipment.totalChargeable || 0).toFixed(2)} kg</div>
-                            <div><strong>总费用:</strong> ¥${(shipment.totalPrice || 0).toFixed(2)} (¥${(shipment.unitPrice || 0).toFixed(2)}/kg)</div>
+                            <div><strong>总重量:</strong> ${(shipment.totalWeight || 0).toFixed(2)} ${settings.weightUnit || 'kg'}</div>
+                            <div><strong>计费重量:</strong> ${(shipment.totalChargeable || 0).toFixed(2)} ${settings.weightUnit || 'kg'}</div>
+                            <div><strong>总费用:</strong> ¥${(shipment.totalPrice || 0).toFixed(2)} (¥${(shipment.unitPrice || 0).toFixed(2)}/${settings.weightUnit || 'kg'})</div>
                             <div><strong>预估利润:</strong> <span style="color: ${profitColor}">¥${profit.toFixed(2)}</span></div>
                         </div>
                     </div>
@@ -19261,6 +19477,8 @@ Content-Type: application/json</pre>
                     <div class="input-label">货物明细</div>
                     ${itemsHtml}
                 </div>
+
+                ${trackingHtml}
 
                 <div style="margin-top: 20px;">
                     <div class="input-label">物流作业管理</div>
@@ -19322,9 +19540,9 @@ Content-Type: application/json</pre>
                     状态: statusMap[shipment.status] || shipment.status || '待处理',
                     总件数: shipment.totalQuantity || 0,
                     总体积: (shipment.totalVolume || 0).toFixed(3) + ' m³',
-                    总重量: (shipment.totalWeight || 0).toFixed(2) + ' kg',
-                    计费重量: (shipment.totalChargeable || 0).toFixed(2) + ' kg',
-                    单价: '¥' + (shipment.unitPrice || 0).toFixed(2) + '/kg',
+                    总重量: (shipment.totalWeight || 0).toFixed(2) + ' ' + (settings.weightUnit || 'kg'),
+                    计费重量: (shipment.totalChargeable || 0).toFixed(2) + ' ' + (settings.weightUnit || 'kg'),
+                    单价: '¥' + (shipment.unitPrice || 0).toFixed(2) + '/' + (settings.weightUnit || 'kg'),
                     总费用: '¥' + (shipment.totalPrice || 0).toFixed(2),
                     预估利润: '¥' + (shipment.profitData?.estimatedProfit || 0).toFixed(2),
                     利润率: (shipment.profitData?.profitMargin || 0).toFixed(1) + '%',
@@ -19501,7 +19719,7 @@ Content-Type: application/json</pre>
                         <tfoot>
                             <tr>
                                 <td colspan="3" style="text-align: right; font-weight: bold;">汇总:</td>
-                                <td colspan="2">${shipment.totalQuantity || 0}件 / ${(shipment.totalChargeable || 0).toFixed(2)}kg</td>
+                                <td colspan="2">${shipment.totalQuantity || 0}件 / ${(shipment.totalChargeable || 0).toFixed(2)}${settings.weightUnit || 'kg'}</td>
                             </tr>
                         </tfoot>
                     </table>
@@ -19514,7 +19732,7 @@ Content-Type: application/json</pre>
                     <div class="pdf-section-title">费用结算</div>
                     <table class="pdf-table">
                         <tr><td class="pdf-label">总费用</td><td class="pdf-value">¥${(shipment.totalPrice || 0).toFixed(2)}</td></tr>
-                        <tr><td class="pdf-label">单价</td><td class="pdf-value">¥${(shipment.unitPrice || 0).toFixed(2)}/kg</td></tr>
+                        <tr><td class="pdf-label">单价</td><td class="pdf-value">¥${(shipment.unitPrice || 0).toFixed(2)}/${settings.weightUnit || 'kg'}</td></tr>
                     </table>
 
                     ${profitSection}
@@ -21644,7 +21862,7 @@ Content-Type: application/json</pre>
                                     <div style="font-size: 14px; margin-top: 5px;">${item.origin || '未知'} <i class="fas fa-arrow-right" style="font-size:12px;"></i> ${item.destination || '未知'}</div>
                                     <div style="font-size: 12px; color: var(--gray-500); margin-top: 5px;">
                                         <span style="margin-right: 15px;"><i class="far fa-clock"></i> ${new Date(item.createdAt).toLocaleDateString()}</span>
-                                        <span style="margin-right: 15px;"><i class="fas fa-box"></i> ${item.totalQuantity}件 / ${item.totalChargeable.toFixed(2)}kg</span>
+                                        <span style="margin-right: 15px;"><i class="fas fa-box"></i> ${item.totalQuantity}件 / ${item.totalChargeable.toFixed(2)}${settings.weightUnit || 'kg'}</span>
                                         <span><i class="fas fa-coins"></i> <span style="color:${profitColor}">¥${profit.toFixed(2)}</span></span>
                                     </div>
                                 </div>
@@ -21664,7 +21882,8 @@ Content-Type: application/json</pre>
                     if (item.resultType === 'containerOrder') {
                         extraInfo = item.containerType ? `<span style="margin-right: 15px;"><i class="fas fa-cube"></i> ${item.containerType}</span>` : '';
                     } else {
-                        extraInfo = `<span style="margin-right: 15px;"><i class="fas fa-weight-hanging"></i> ${(item.customerChargeWeight || 0).toFixed(2)}kg</span>`;
+                        const weightUnit = item.customerWeightUnit || item.customer_weight_unit || 'kg';
+                        extraInfo = `<span style="margin-right: 15px;"><i class="fas fa-weight-hanging"></i> ${(item.customerChargeWeight || 0).toFixed(2)}${weightUnit}</span>`;
                     }
 
                     html += `
@@ -21714,6 +21933,42 @@ Content-Type: application/json</pre>
 
             const orderTypeText = orderType === 'businessOrder' ? '贴标订单' : '整柜订单';
             const fee = order.neutralFee || order.quotePrice || 0;
+            
+            const orderTracking = trackingHistory.filter(t => t.shipmentId === order.id || t.shipment_id === order.id || t.orderId === order.id || t.order_id === order.id).sort((a, b) => new Date(b.createdAt || b.created_at) - new Date(a.createdAt || a.created_at));
+            
+            let trackingHtml = '';
+            if (orderTracking.length > 0) {
+                const statusMap = {
+                    'pending': '待处理', 'processing': '处理中', 'picked-up': '已揽收', 'shipped': '已发货',
+                    'in-transit': '运输中', 'clearance': '清关中', 'out-for-delivery': '派送中',
+                    'delivered': '已送达', 'returned': '已退回', 'exception': '异常'
+                };
+                trackingHtml = `
+                    <div style="margin-top: 20px;">
+                        <div class="input-label">物流轨迹</div>
+                        <div style="background: var(--input-bg); padding: 15px; border-radius: var(--radius-md); max-height: 200px; overflow-y: auto;">
+                            ${orderTracking.map((track, idx) => {
+                                const trackStatus = statusMap[track.status] || track.status || '状态更新';
+                                const trackTime = new Date(track.createdAt || track.created_at || track.time).toLocaleString();
+                                const isLatest = idx === 0;
+                                return `
+                                    <div style="display: flex; gap: 10px; margin-bottom: 10px; ${idx === orderTracking.length - 1 ? '' : 'padding-bottom: 10px; border-bottom: 1px solid var(--border);'}">
+                                        <div style="width: 10px; height: 10px; border-radius: 50%; background: ${isLatest ? 'var(--primary)' : 'var(--gray-400)'}; margin-top: 4px; flex-shrink: 0;"></div>
+                                        <div style="flex: 1;">
+                                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                                <div style="font-weight: ${isLatest ? '600' : 'normal'}; color: ${isLatest ? 'var(--primary)' : 'var(--text)'}; font-size: 13px;">${trackStatus}</div>
+                                                <div style="font-size: 11px; color: var(--gray-500);">${trackTime}</div>
+                                            </div>
+                                            ${track.description || track.message ? `<div style="font-size: 12px; color: var(--gray-600); margin-top: 3px;">${track.description || track.message}</div>` : ''}
+                                        </div>
+                                    </div>
+                                `;
+                            }).join('')}
+                        </div>
+                    </div>
+                `;
+            }
+            
             const content = `
                 <div class="grid grid-2">
                     <div>
@@ -21751,6 +22006,7 @@ Content-Type: application/json</pre>
                         </div>
                     </div>
                 </div>
+                ${trackingHtml}
             `;
 
             showModal(`${orderTypeText}详情: ${orderId}`, content, [
@@ -21980,7 +22236,7 @@ Content-Type: application/json</pre>
                         <div style="background: var(--input-bg); padding:15px; border-radius: var(--radius-md);">
                             <div><strong>客户:</strong> ${shipment.customerName || '未指定'}</div>
                             <div><strong>总价:</strong> ¥${shipment.totalPrice.toFixed(2)}</div>
-                            <div><strong>单价:</strong> ¥${shipment.unitPrice.toFixed(2)}/kg</div>
+                            <div><strong>单价:</strong> ¥${shipment.unitPrice.toFixed(2)}/${settings.weightUnit || 'kg'}</div>
                         </div>
                     </div>
                 </div>
@@ -23948,7 +24204,7 @@ PORT=3000</pre>
                         <div style="display: flex; gap: 20px; font-size: 13px; color: var(--gray-500);">
                             <span><i class="far fa-calendar"></i> ${new Date(s.createdAt).toLocaleDateString()}</span>
                             <span><i class="fas fa-box"></i> ${s.totalQuantity || 0} 件</span>
-                            <span><i class="fas fa-weight-hanging"></i> ${(s.totalChargeable || 0).toFixed(2)} kg</span>
+                            <span><i class="fas fa-weight-hanging"></i> ${(s.totalChargeable || 0).toFixed(2)} ${settings.weightUnit || 'kg'}</span>
                         </div>
                     </div>
                 `;
@@ -23999,7 +24255,7 @@ PORT=3000</pre>
                             <div style="margin-bottom: 8px;"><strong>状态:</strong> ${statusText}</div>
                             <div style="margin-bottom: 8px;"><strong>客户:</strong> ${shipment.customerName || '未指定'}</div>
                             <div style="margin-bottom: 8px;"><strong>总件数:</strong> ${shipment.totalQuantity || 0} 件</div>
-                            <div><strong>计费重量:</strong> ${(shipment.totalChargeable || 0).toFixed(2)} kg</div>
+                            <div><strong>计费重量:</strong> ${(shipment.totalChargeable || 0).toFixed(2)} ${settings.weightUnit || 'kg'}</div>
                         </div>
                     </div>
                     <div>
@@ -24344,6 +24600,8 @@ PORT=3000</pre>
             const modeText = (modeSelect.value === "CUSTOM") ?
                 document.getElementById('custom-label-mode-input').value :
                 modeSelect.options[modeSelect.selectedIndex].text;
+            const labelStyle = document.getElementById('label-style')?.value || 'classic';
+            const codeType = document.getElementById('label-code-type')?.value || 'barcode';
 
             const container = document.getElementById('labels-preview-container');
             container.innerHTML = '';
@@ -24368,33 +24626,137 @@ PORT=3000</pre>
                 }
                 
                 const barcodeData = `${tracking}-${i}/${qty}`;
-
-                const tempCanvas = document.getElementById('temp-canvas');
-
-                JsBarcode(tempCanvas, barcodeData, {
-                     format: "CODE128",
-                     width: 3.5, height: 150, displayValue: false,
-                     margin: 10
-                });
-
-                const imgData = tempCanvas.toDataURL("image/jpeg", 1.0);
-
                 const labelDiv = document.createElement('div');
                 labelDiv.className = 'label-preview-responsive';
-                labelDiv.innerHTML = `
-                    <div style="width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: space-between; padding: 4mm;">
-                        <div style="width: 100%; text-align: center; font-size: 20px; font-weight: bold; border-bottom: 4px solid #000; padding-bottom: 1.5mm;">${modeText}</div>
-                        <div style="width: 100%; text-align: center; margin: 1mm 0;">
-                            <div style="font-size: 38px; font-weight: 900; line-height:1;">${i} / ${qty}</div>
-                            <span style="font-size: 22px; font-weight: 900; font-family: monospace; display: block; border-top: 2px solid #000; border-bottom: 2px solid #000; padding: 1.5mm 0; margin: 1.5mm 0;">${tracking}</span>
-                        </div>
-                        <div style="width: 100%; height: 45mm; display: flex; align-items: center; justify-content: center;">
-                            <img src="${imgData}" style="width: 100%; max-height: 100%; height: auto; display: block;">
-                        </div>
-                        <div style="width: 100%; border: 3px solid #000; text-align: center; font-size: 18px; font-weight: bold; padding: 1mm;">MADE IN CHINA</div>
-                    </div>
-                `;
+                
+                let codeHtml = '';
+                
+                if (codeType === 'barcode' || codeType === 'both') {
+                    const tempCanvas = document.getElementById('temp-canvas');
+                    JsBarcode(tempCanvas, barcodeData, {
+                        format: "CODE128",
+                        width: 3.5, height: 150, displayValue: false,
+                        margin: 10
+                    });
+                    const imgData = tempCanvas.toDataURL("image/jpeg", 1.0);
+                    codeHtml += `<img src="${imgData}" style="width: 100%; max-height: 100%; height: auto; display: block;">`;
+                }
+                
+                if (codeType === 'qrcode' || codeType === 'both') {
+                    const qrCanvas = document.createElement('canvas');
+                    QRCode.toCanvas(qrCanvas, barcodeData, { width: 200, margin: 2 }, function(error) {
+                        if (error) console.error(error);
+                    });
+                    const qrData = qrCanvas.toDataURL("image/png", 1.0);
+                    codeHtml += `<img src="${qrData}" style="width: ${codeType === 'both' ? '45%' : '100%'}; max-height: 100%; height: auto; display: block;">`;
+                }
 
+                let styleHtml = '';
+                if (labelStyle === 'classic') {
+                    styleHtml = `
+                        <div style="width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: space-between; padding: 4mm;">
+                            <div style="width: 100%; text-align: center; font-size: 20px; font-weight: bold; border-bottom: 4px solid #000; padding-bottom: 1.5mm;">${modeText}</div>
+                            <div style="width: 100%; text-align: center; margin: 1mm 0;">
+                                <div style="font-size: 38px; font-weight: 900; line-height:1;">${i} / ${qty}</div>
+                                <span style="font-size: 22px; font-weight: 900; font-family: monospace; display: block; border-top: 2px solid #000; border-bottom: 2px solid #000; padding: 1.5mm 0; margin: 1.5mm 0;">${tracking}</span>
+                            </div>
+                            <div style="width: 100%; height: 45mm; display: flex; align-items: center; justify-content: center; gap: 5mm;">
+                                ${codeHtml}
+                            </div>
+                            <div style="width: 100%; border: 3px solid #000; text-align: center; font-size: 18px; font-weight: bold; padding: 1mm;">MADE IN CHINA</div>
+                        </div>
+                    `;
+                } else if (labelStyle === 'modern') {
+                    styleHtml = `
+                        <div style="width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: space-between; padding: 3mm; background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);">
+                            <div style="width: 100%; text-align: center; font-size: 16px; font-weight: 600; color: #2c3e50; padding-bottom: 2mm; border-bottom: 2px solid #3498db;">${modeText}</div>
+                            <div style="width: 100%; text-align: center; margin: 2mm 0;">
+                                <div style="font-size: 32px; font-weight: 800; color: #2980b9;">${i} / ${qty}</div>
+                                <div style="font-size: 18px; font-weight: 700; font-family: monospace; color: #34495e; margin-top: 2mm;">${tracking}</div>
+                            </div>
+                            <div style="width: 100%; height: 40mm; display: flex; align-items: center; justify-content: center; gap: 5mm;">
+                                ${codeHtml}
+                            </div>
+                            <div style="width: 100%; text-align: center; font-size: 14px; font-weight: 600; color: #7f8c8d; padding-top: 2mm;">MADE IN CHINA</div>
+                        </div>
+                    `;
+                } else if (labelStyle === 'compact') {
+                    styleHtml = `
+                        <div style="width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: space-between; padding: 2mm;">
+                            <div style="width: 100%; display: flex; justify-content: space-between; align-items: center; font-size: 14px; font-weight: bold;">
+                                <span>${modeText}</span>
+                                <span style="font-size: 24px; font-weight: 900;">${i}/${qty}</span>
+                            </div>
+                            <div style="width: 100%; text-align: center; font-size: 16px; font-weight: 800; font-family: monospace; margin: 1mm 0;">${tracking}</div>
+                            <div style="width: 100%; height: 35mm; display: flex; align-items: center; justify-content: center; gap: 3mm;">
+                                ${codeHtml}
+                            </div>
+                            <div style="width: 100%; text-align: center; font-size: 12px; font-weight: bold;">MADE IN CHINA</div>
+                        </div>
+                    `;
+                } else if (labelStyle === 'detailed') {
+                    const now = new Date();
+                    const dateStr = now.toLocaleDateString('zh-CN');
+                    const timeStr = now.toLocaleTimeString('zh-CN');
+                    styleHtml = `
+                        <div style="width: 100%; height: 100%; display: flex; flex-direction: column; padding: 3mm;">
+                            <div style="width: 100%; display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #000; padding-bottom: 2mm; margin-bottom: 2mm;">
+                                <div style="font-size: 18px; font-weight: bold;">${modeText}</div>
+                                <div style="font-size: 28px; font-weight: 900;">${i} / ${qty}</div>
+                            </div>
+                            <div style="width: 100%; text-align: center; font-size: 20px; font-weight: 800; font-family: monospace; margin: 2mm 0; padding: 2mm; border: 2px solid #000;">${tracking}</div>
+                            <div style="width: 100%; height: 35mm; display: flex; align-items: center; justify-content: center; gap: 5mm; margin: 2mm 0;">
+                                ${codeHtml}
+                            </div>
+                            <div style="width: 100%; display: flex; justify-content: space-between; font-size: 11px; color: #666; margin-top: auto;">
+                                <div>日期: ${dateStr} ${timeStr}</div>
+                                <div style="font-weight: bold; font-size: 13px;">MADE IN CHINA</div>
+                            </div>
+                        </div>
+                    `;
+                } else if (labelStyle === 'elegant') {
+                    styleHtml = `
+                        <div style="width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: space-between; padding: 3mm; background: linear-gradient(145deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%); color: #fff; border-radius: 2mm;">
+                            <div style="width: 100%; text-align: center; font-size: 14px; font-weight: 600; letter-spacing: 2px; text-transform: uppercase; color: #e94560; padding-bottom: 2mm; border-bottom: 1px solid rgba(233,69,96,0.3);">${modeText}</div>
+                            <div style="width: 100%; text-align: center; margin: 2mm 0;">
+                                <div style="font-size: 42px; font-weight: 900; background: linear-gradient(135deg, #e94560, #f5af19); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">${i} / ${qty}</div>
+                                <div style="font-size: 16px; font-weight: 700; font-family: monospace; color: #53a8b6; margin-top: 2mm; letter-spacing: 1px;">${tracking}</div>
+                            </div>
+                            <div style="width: 100%; height: 38mm; display: flex; align-items: center; justify-content: center; gap: 5mm; background: rgba(255,255,255,0.05); border-radius: 2mm; padding: 2mm;">
+                                ${codeHtml}
+                            </div>
+                            <div style="width: 100%; text-align: center; font-size: 11px; font-weight: 700; color: #53a8b6; letter-spacing: 3px; padding-top: 2mm;">MADE IN CHINA</div>
+                        </div>
+                    `;
+                } else if (labelStyle === 'bold') {
+                    styleHtml = `
+                        <div style="width: 100%; height: 100%; display: flex; flex-direction: column; padding: 0; background: #fff;">
+                            <div style="width: 100%; background: #000; color: #fff; text-align: center; font-size: 22px; font-weight: 900; padding: 3mm 0; letter-spacing: 3px;">${modeText}</div>
+                            <div style="width: 100%; text-align: center; padding: 3mm 0;">
+                                <div style="font-size: 56px; font-weight: 900; color: #000; line-height: 1;">${i}/${qty}</div>
+                            </div>
+                            <div style="width: 100%; background: #000; color: #fff; text-align: center; font-size: 18px; font-weight: 800; font-family: monospace; padding: 2mm 0; letter-spacing: 2px;">${tracking}</div>
+                            <div style="width: 100%; height: 35mm; display: flex; align-items: center; justify-content: center; gap: 5mm; padding: 2mm;">
+                                ${codeHtml}
+                            </div>
+                            <div style="width: 100%; background: #000; color: #fff; text-align: center; font-size: 14px; font-weight: 800; padding: 2mm 0; letter-spacing: 4px;">MADE IN CHINA</div>
+                        </div>
+                    `;
+                } else if (labelStyle === 'minimal') {
+                    styleHtml = `
+                        <div style="width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 4mm; background: #fff; border: 1px solid #e0e0e0;">
+                            <div style="font-size: 12px; color: #999; letter-spacing: 2px; margin-bottom: 3mm;">${modeText}</div>
+                            <div style="font-size: 36px; font-weight: 300; color: #333; margin-bottom: 2mm;">${i} / ${qty}</div>
+                            <div style="font-size: 14px; font-family: monospace; color: #666; margin-bottom: 4mm;">${tracking}</div>
+                            <div style="width: 100%; height: 40mm; display: flex; align-items: center; justify-content: center; gap: 5mm;">
+                                ${codeHtml}
+                            </div>
+                            <div style="font-size: 10px; color: #bbb; letter-spacing: 3px; margin-top: auto;">MADE IN CHINA</div>
+                        </div>
+                    `;
+                }
+                
+                labelDiv.innerHTML = styleHtml;
                 responsiveContainer.appendChild(labelDiv);
             }
 
