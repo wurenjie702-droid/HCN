@@ -14,7 +14,7 @@
     <!-- 引入条形码生成库 -->
     <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
     <!-- 引入二维码生成库 -->
-    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
     <!-- 引入 html2canvas 用于解决 PDF 中文乱码问题 -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <!-- 引入 Chart.js 用于图表 -->
@@ -4878,13 +4878,26 @@
                             <div class="input-group">
                                 <div class="input-label">标签风格</div>
                                 <select class="input-field" id="label-style">
-                                    <option value="classic">经典风格</option>
-                                    <option value="modern">现代简约</option>
-                                    <option value="compact">紧凑型</option>
-                                    <option value="detailed">详细信息型</option>
-                                    <option value="elegant">优雅渐变</option>
-                                    <option value="bold">粗犷醒目</option>
-                                    <option value="minimal">极简白</option>
+                                    <option value="style1">标准横版</option>
+                                    <option value="style2">标准竖版</option>
+                                    <option value="style3">左码右信息</option>
+                                    <option value="style4">上码下信息</option>
+                                    <option value="style5">居中大码</option>
+                                    <option value="style6">双栏分列</option>
+                                    <option value="style7">表格式</option>
+                                    <option value="style8">边框式</option>
+                                    <option value="style9">紧凑行式</option>
+                                    <option value="style10">标签贴纸式</option>
+                                    <option value="style11">信封式</option>
+                                    <option value="style12">分割线式</option>
+                                    <option value="style13">底栏黑条</option>
+                                    <option value="style14">圆角卡片</option>
+                                    <option value="style15">双横线</option>
+                                    <option value="style16">居中对称</option>
+                                    <option value="style17">左对齐清单</option>
+                                    <option value="style18">编号突出</option>
+                                    <option value="style19">底纹水印</option>
+                                    <option value="style20">快递面单</option>
                                 </select>
                             </div>
 
@@ -7652,6 +7665,10 @@ Content-Type: application/json</pre>
                         shipments = cloudData.shipments;
                         safeSetItem('shipments', JSON.stringify(shipments));
                     }
+                    if (cloudData.tracking_history && cloudData.tracking_history.length > 0) {
+                        trackingHistory = cloudData.tracking_history;
+                        safeSetItem('trackingHistory', JSON.stringify(trackingHistory));
+                    }
                     if (cloudData.business_orders && cloudData.business_orders.length > 0) {
                         businessOrders = normalizeBusinessOrders(cloudData.business_orders);
                         safeSetItem('businessOrders', JSON.stringify(businessOrders));
@@ -8942,6 +8959,7 @@ Content-Type: application/json</pre>
                     const syncPayload = {
                         customers: customers || [],
                         shipments: shipments || [],
+                        trackingHistory: trackingHistory || [],
                         businessOrders: businessOrders || [],
                         containerOrders: containerOrders || [],
                         warehouseEntries: warehouseEntries || [],
@@ -13167,6 +13185,14 @@ Content-Type: application/json</pre>
                         <div style="display: flex; gap: 8px; margin-bottom: 10px;">
                             <select id="business-order-tracking-status" class="input-field" style="flex: 1;">
                                 <option value="">选择状态...</option>
+                                <option value="ordered">已下单</option>
+                                <option value="warehoused">已入库</option>
+                                <option value="reviewed">已审单</option>
+                                <option value="loaded">已装柜</option>
+                                <option value="sailed">已开船</option>
+                                <option value="arrived">已到港</option>
+                                <option value="cleared">已清关</option>
+                                <option value="completed">已完结</option>
                                 <option value="pending">待处理</option>
                                 <option value="processing">处理中</option>
                                 <option value="picked-up">已揽收</option>
@@ -13175,8 +13201,11 @@ Content-Type: application/json</pre>
                                 <option value="clearance">清关中</option>
                                 <option value="out-for-delivery">派送中</option>
                                 <option value="delivered">已送达</option>
+                                <option value="returned">已退回</option>
                                 <option value="exception">异常</option>
+                                <option value="custom">自定义...</option>
                             </select>
+                            <input type="text" id="business-order-tracking-custom-status" class="input-field" style="flex: 1; display: none;" placeholder="输入自定义状态">
                             <input type="text" id="business-order-tracking-location" class="input-field" style="flex: 1;" placeholder="位置">
                             <input type="text" id="business-order-tracking-desc" class="input-field" style="flex: 1;" placeholder="描述">
                             <button class="btn btn-sm btn-primary" onclick="addTrackingEntry('${orderId}', 'business')"><i class="fas fa-plus"></i> 添加</button>
@@ -13191,7 +13220,7 @@ Content-Type: application/json</pre>
                 { text: '保存', class: 'btn-primary', onclick: `saveBusinessOrder('${orderId}')` }
             ], true);
             
-            setTimeout(() => { recalcBusinessOrderCompanyProfit(); loadOrderTrackingList('${orderId}', 'business'); }, 100);
+            setTimeout(() => { recalcBusinessOrderCompanyProfit(); loadOrderTrackingList('${orderId}', 'business'); initTrackingStatusToggle('business'); }, 100);
         }
         
         function updateBusinessOrderProfit() {
@@ -13712,6 +13741,14 @@ Content-Type: application/json</pre>
                         <div style="display: flex; gap: 8px; margin-bottom: 10px;">
                             <select id="container-order-tracking-status" class="input-field" style="flex: 1;">
                                 <option value="">选择状态...</option>
+                                <option value="ordered">已下单</option>
+                                <option value="warehoused">已入库</option>
+                                <option value="reviewed">已审单</option>
+                                <option value="loaded">已装柜</option>
+                                <option value="sailed">已开船</option>
+                                <option value="arrived">已到港</option>
+                                <option value="cleared">已清关</option>
+                                <option value="completed">已完结</option>
                                 <option value="pending">待处理</option>
                                 <option value="processing">处理中</option>
                                 <option value="picked-up">已揽收</option>
@@ -13720,8 +13757,11 @@ Content-Type: application/json</pre>
                                 <option value="clearance">清关中</option>
                                 <option value="out-for-delivery">派送中</option>
                                 <option value="delivered">已送达</option>
+                                <option value="returned">已退回</option>
                                 <option value="exception">异常</option>
+                                <option value="custom">自定义...</option>
                             </select>
+                            <input type="text" id="container-order-tracking-custom-status" class="input-field" style="flex: 1; display: none;" placeholder="输入自定义状态">
                             <input type="text" id="container-order-tracking-location" class="input-field" style="flex: 1;" placeholder="位置">
                             <input type="text" id="container-order-tracking-desc" class="input-field" style="flex: 1;" placeholder="描述">
                             <button class="btn btn-sm btn-primary" onclick="addTrackingEntry('${orderId}', 'container')"><i class="fas fa-plus"></i> 添加</button>
@@ -13736,7 +13776,7 @@ Content-Type: application/json</pre>
                 { text: '保存', class: 'btn-primary', onclick: `saveContainerOrder('${orderId}')` }
             ], true);
             
-            setTimeout(() => loadOrderTrackingList('${orderId}', 'container'), 100);
+            setTimeout(() => { loadOrderTrackingList('${orderId}', 'container'); initTrackingStatusToggle('container'); }, 100);
         }
 
         function deleteBusinessOrder(orderId) {
@@ -18801,10 +18841,18 @@ Content-Type: application/json</pre>
 
         function addTrackingEntry(orderId, orderType) {
             const statusEl = document.getElementById(`${orderType}-order-tracking-status`);
+            const customStatusEl = document.getElementById(`${orderType}-order-tracking-custom-status`);
             const locationEl = document.getElementById(`${orderType}-order-tracking-location`);
             const descEl = document.getElementById(`${orderType}-order-tracking-desc`);
             
-            const status = statusEl.value;
+            let status = statusEl.value;
+            if (status === 'custom') {
+                status = customStatusEl.value.trim();
+                if (!status) {
+                    showNotification('请输入自定义状态', 'error');
+                    return;
+                }
+            }
             const location = locationEl.value.trim();
             const desc = descEl.value.trim();
             
@@ -18861,6 +18909,8 @@ Content-Type: application/json</pre>
             ).sort((a, b) => new Date(b.createdAt || b.created_at) - new Date(a.createdAt || a.created_at));
             
             const statusMap = {
+                'ordered': '已下单', 'warehoused': '已入库', 'reviewed': '已审单', 'loaded': '已装柜',
+                'sailed': '已开船', 'arrived': '已到港', 'cleared': '已清关', 'completed': '已完结',
                 'pending': '待处理', 'processing': '处理中', 'picked-up': '已揽收', 'shipped': '已发货',
                 'in-transit': '运输中', 'clearance': '清关中', 'out-for-delivery': '派送中',
                 'delivered': '已送达', 'returned': '已退回', 'exception': '异常'
@@ -18896,6 +18946,15 @@ Content-Type: application/json</pre>
             saveData('trackingHistory', trackingHistory);
             loadOrderTrackingList(orderId, orderType);
             showNotification('轨迹已删除', 'success');
+        }
+
+        function initTrackingStatusToggle(orderType) {
+            const statusEl = document.getElementById(`${orderType}-order-tracking-status`);
+            const customEl = document.getElementById(`${orderType}-order-tracking-custom-status`);
+            if (!statusEl || !customEl) return;
+            statusEl.addEventListener('change', function() {
+                customEl.style.display = this.value === 'custom' ? 'block' : 'none';
+            });
         }
 
         function updateShipmentStatus(shipmentId, newStatus) {
@@ -24643,115 +24702,271 @@ PORT=3000</pre>
                 }
                 
                 if (codeType === 'qrcode' || codeType === 'both') {
-                    const qrCanvas = document.createElement('canvas');
-                    QRCode.toCanvas(qrCanvas, barcodeData, { width: 200, margin: 2 }, function(error) {
-                        if (error) console.error(error);
-                    });
-                    const qrData = qrCanvas.toDataURL("image/png", 1.0);
-                    codeHtml += `<img src="${qrData}" style="width: ${codeType === 'both' ? '45%' : '100%'}; max-height: 100%; height: auto; display: block;">`;
+                    try {
+                        const qr = qrcode(0, 'M');
+                        qr.addData(barcodeData);
+                        qr.make();
+                        const qrData = qr.createDataURL(4, 2);
+                        codeHtml += `<img src="${qrData}" style="width: ${codeType === 'both' ? '45%' : '100%'}; max-height: 100%; height: auto; display: block;">`;
+                    } catch (err) {
+                        console.error('QR生成失败:', err);
+                        codeHtml += `<div style="padding:10px;text-align:center;font-size:11px;color:#999;">二维码生成失败</div>`;
+                    }
                 }
 
                 let styleHtml = '';
-                if (labelStyle === 'classic') {
+                if (labelStyle === 'style1') {
                     styleHtml = `
-                        <div style="width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: space-between; padding: 4mm;">
-                            <div style="width: 100%; text-align: center; font-size: 20px; font-weight: bold; border-bottom: 4px solid #000; padding-bottom: 1.5mm;">${modeText}</div>
-                            <div style="width: 100%; text-align: center; margin: 1mm 0;">
-                                <div style="font-size: 38px; font-weight: 900; line-height:1;">${i} / ${qty}</div>
-                                <span style="font-size: 22px; font-weight: 900; font-family: monospace; display: block; border-top: 2px solid #000; border-bottom: 2px solid #000; padding: 1.5mm 0; margin: 1.5mm 0;">${tracking}</span>
+                        <div style="width:100%;height:100%;display:flex;flex-direction:column;padding:3mm;">
+                            <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #000;padding-bottom:2mm;margin-bottom:2mm;">
+                                <span style="font-size:16px;font-weight:700;">${modeText}</span>
+                                <span style="font-size:24px;font-weight:900;">${i}/${qty}</span>
                             </div>
-                            <div style="width: 100%; height: 45mm; display: flex; align-items: center; justify-content: center; gap: 5mm;">
-                                ${codeHtml}
-                            </div>
-                            <div style="width: 100%; border: 3px solid #000; text-align: center; font-size: 18px; font-weight: bold; padding: 1mm;">MADE IN CHINA</div>
+                            <div style="text-align:center;font-size:18px;font-weight:800;font-family:monospace;margin:2mm 0;">${tracking}</div>
+                            <div style="flex:1;display:flex;align-items:center;justify-content:center;">${codeHtml}</div>
+                            <div style="text-align:center;font-size:12px;font-weight:700;border-top:1px solid #000;padding-top:2mm;margin-top:2mm;">MADE IN CHINA</div>
                         </div>
                     `;
-                } else if (labelStyle === 'modern') {
+                } else if (labelStyle === 'style2') {
                     styleHtml = `
-                        <div style="width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: space-between; padding: 3mm; background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);">
-                            <div style="width: 100%; text-align: center; font-size: 16px; font-weight: 600; color: #2c3e50; padding-bottom: 2mm; border-bottom: 2px solid #3498db;">${modeText}</div>
-                            <div style="width: 100%; text-align: center; margin: 2mm 0;">
-                                <div style="font-size: 32px; font-weight: 800; color: #2980b9;">${i} / ${qty}</div>
-                                <div style="font-size: 18px; font-weight: 700; font-family: monospace; color: #34495e; margin-top: 2mm;">${tracking}</div>
+                        <div style="width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:space-between;padding:4mm;">
+                            <div style="font-size:14px;font-weight:700;text-align:center;width:100%;border-bottom:1px solid #000;padding-bottom:2mm;">${modeText}</div>
+                            <div style="flex:1;display:flex;align-items:center;justify-content:center;width:100%;">${codeHtml}</div>
+                            <div style="text-align:center;width:100%;">
+                                <div style="font-size:28px;font-weight:900;">${i}/${qty}</div>
+                                <div style="font-size:14px;font-weight:700;font-family:monospace;margin-top:1mm;">${tracking}</div>
                             </div>
-                            <div style="width: 100%; height: 40mm; display: flex; align-items: center; justify-content: center; gap: 5mm;">
-                                ${codeHtml}
-                            </div>
-                            <div style="width: 100%; text-align: center; font-size: 14px; font-weight: 600; color: #7f8c8d; padding-top: 2mm;">MADE IN CHINA</div>
+                            <div style="font-size:11px;font-weight:700;border-top:1px solid #000;padding-top:2mm;width:100%;text-align:center;">MADE IN CHINA</div>
                         </div>
                     `;
-                } else if (labelStyle === 'compact') {
+                } else if (labelStyle === 'style3') {
                     styleHtml = `
-                        <div style="width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: space-between; padding: 2mm;">
-                            <div style="width: 100%; display: flex; justify-content: space-between; align-items: center; font-size: 14px; font-weight: bold;">
+                        <div style="width:100%;height:100%;display:flex;padding:2mm;">
+                            <div style="flex:1;display:flex;align-items:center;justify-content:center;padding-right:2mm;">${codeHtml}</div>
+                            <div style="flex:1;display:flex;flex-direction:column;justify-content:space-between;padding-left:2mm;border-left:1px solid #000;">
+                                <div style="font-size:14px;font-weight:700;">${modeText}</div>
+                                <div>
+                                    <div style="font-size:32px;font-weight:900;">${i}/${qty}</div>
+                                    <div style="font-size:13px;font-weight:700;font-family:monospace;margin-top:1mm;">${tracking}</div>
+                                </div>
+                                <div style="font-size:10px;font-weight:700;">MADE IN CHINA</div>
+                            </div>
+                        </div>
+                    `;
+                } else if (labelStyle === 'style4') {
+                    styleHtml = `
+                        <div style="width:100%;height:100%;display:flex;flex-direction:column;padding:2mm;">
+                            <div style="flex:1;display:flex;align-items:center;justify-content:center;">${codeHtml}</div>
+                            <div style="border-top:2px solid #000;padding-top:2mm;margin-top:2mm;">
+                                <div style="display:flex;justify-content:space-between;align-items:center;">
+                                    <span style="font-size:14px;font-weight:700;">${modeText}</span>
+                                    <span style="font-size:22px;font-weight:900;">${i}/${qty}</span>
+                                </div>
+                                <div style="font-size:14px;font-weight:700;font-family:monospace;text-align:center;margin-top:1mm;">${tracking}</div>
+                                <div style="font-size:10px;font-weight:700;text-align:center;margin-top:1mm;">MADE IN CHINA</div>
+                            </div>
+                        </div>
+                    `;
+                } else if (labelStyle === 'style5') {
+                    styleHtml = `
+                        <div style="width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:3mm;">
+                            <div style="font-size:12px;font-weight:600;color:#666;margin-bottom:2mm;">${modeText}</div>
+                            <div style="display:flex;align-items:center;justify-content:center;width:100%;flex:1;">${codeHtml}</div>
+                            <div style="font-size:24px;font-weight:900;margin-top:2mm;">${i}/${qty}</div>
+                            <div style="font-size:12px;font-weight:700;font-family:monospace;margin-top:1mm;">${tracking}</div>
+                            <div style="font-size:9px;color:#999;margin-top:1mm;">MADE IN CHINA</div>
+                        </div>
+                    `;
+                } else if (labelStyle === 'style6') {
+                    styleHtml = `
+                        <div style="width:100%;height:100%;display:flex;padding:2mm;">
+                            <div style="flex:1;border-right:1px solid #000;padding-right:2mm;display:flex;flex-direction:column;justify-content:space-between;">
+                                <div style="font-size:14px;font-weight:700;">${modeText}</div>
+                                <div style="font-size:28px;font-weight:900;">${i}/${qty}</div>
+                                <div style="font-size:11px;font-weight:700;font-family:monospace;">${tracking}</div>
+                                <div style="font-size:9px;">MADE IN CHINA</div>
+                            </div>
+                            <div style="flex:1;padding-left:2mm;display:flex;align-items:center;justify-content:center;">${codeHtml}</div>
+                        </div>
+                    `;
+                } else if (labelStyle === 'style7') {
+                    styleHtml = `
+                        <div style="width:100%;height:100%;display:flex;flex-direction:column;padding:2mm;">
+                            <table style="width:100%;border-collapse:collapse;font-size:12px;">
+                                <tr><td style="border:1px solid #000;padding:2mm;font-weight:700;width:30%;">运输方式</td><td style="border:1px solid #000;padding:2mm;">${modeText}</td></tr>
+                                <tr><td style="border:1px solid #000;padding:2mm;font-weight:700;">件数</td><td style="border:1px solid #000;padding:2mm;font-size:20px;font-weight:900;">${i}/${qty}</td></tr>
+                                <tr><td style="border:1px solid #000;padding:2mm;font-weight:700;">单号</td><td style="border:1px solid #000;padding:2mm;font-family:monospace;font-weight:700;">${tracking}</td></tr>
+                            </table>
+                            <div style="flex:1;display:flex;align-items:center;justify-content:center;margin:2mm 0;">${codeHtml}</div>
+                            <div style="text-align:center;font-size:10px;font-weight:700;border-top:1px solid #000;padding-top:1mm;">MADE IN CHINA</div>
+                        </div>
+                    `;
+                } else if (labelStyle === 'style8') {
+                    styleHtml = `
+                        <div style="width:100%;height:100%;display:flex;flex-direction:column;padding:3mm;border:3px solid #000;">
+                            <div style="text-align:center;font-size:16px;font-weight:700;padding-bottom:2mm;border-bottom:1px solid #000;">${modeText}</div>
+                            <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;">
+                                <div style="font-size:30px;font-weight:900;">${i}/${qty}</div>
+                                <div style="font-size:13px;font-weight:700;font-family:monospace;margin:2mm 0;">${tracking}</div>
+                                ${codeHtml}
+                            </div>
+                            <div style="text-align:center;font-size:11px;font-weight:700;border-top:1px solid #000;padding-top:2mm;">MADE IN CHINA</div>
+                        </div>
+                    `;
+                } else if (labelStyle === 'style9') {
+                    styleHtml = `
+                        <div style="width:100%;height:100%;display:flex;flex-direction:column;justify-content:center;padding:2mm;">
+                            <div style="display:flex;justify-content:space-between;align-items:baseline;font-size:12px;font-weight:700;margin-bottom:1mm;">
+                                <span>${modeText}</span><span>${i}/${qty}</span>
+                            </div>
+                            <div style="font-size:13px;font-weight:800;font-family:monospace;text-align:center;margin-bottom:1mm;">${tracking}</div>
+                            <div style="display:flex;align-items:center;justify-content:center;">${codeHtml}</div>
+                            <div style="font-size:9px;text-align:center;margin-top:1mm;">MADE IN CHINA</div>
+                        </div>
+                    `;
+                } else if (labelStyle === 'style10') {
+                    styleHtml = `
+                        <div style="width:100%;height:100%;display:flex;flex-direction:column;padding:0;border:2px solid #000;border-radius:3mm;overflow:hidden;">
+                            <div style="background:#000;color:#fff;text-align:center;font-size:14px;font-weight:700;padding:2mm 0;">${modeText}</div>
+                            <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:2mm;">
+                                <div style="font-size:26px;font-weight:900;">${i}/${qty}</div>
+                                <div style="font-size:12px;font-weight:700;font-family:monospace;margin:1mm 0;">${tracking}</div>
+                                ${codeHtml}
+                            </div>
+                            <div style="background:#000;color:#fff;text-align:center;font-size:10px;font-weight:700;padding:1mm 0;">MADE IN CHINA</div>
+                        </div>
+                    `;
+                } else if (labelStyle === 'style11') {
+                    styleHtml = `
+                        <div style="width:100%;height:100%;display:flex;flex-direction:column;padding:3mm;border:1px solid #000;border-radius:1mm;">
+                            <div style="text-align:center;font-size:14px;font-weight:700;padding:2mm 0;border-bottom:2px solid #000;">${modeText}</div>
+                            <div style="flex:1;display:flex;align-items:center;justify-content:center;">${codeHtml}</div>
+                            <div style="text-align:center;border-top:1px solid #000;padding-top:2mm;">
+                                <div style="font-size:22px;font-weight:900;">${i}/${qty}</div>
+                                <div style="font-size:12px;font-family:monospace;font-weight:700;">${tracking}</div>
+                                <div style="font-size:9px;margin-top:1mm;">MADE IN CHINA</div>
+                            </div>
+                        </div>
+                    `;
+                } else if (labelStyle === 'style12') {
+                    styleHtml = `
+                        <div style="width:100%;height:100%;display:flex;flex-direction:column;justify-content:space-between;padding:3mm;">
+                            <div style="display:flex;justify-content:space-between;align-items:center;">
+                                <span style="font-size:14px;font-weight:700;">${modeText}</span>
+                                <span style="font-size:20px;font-weight:900;">${i}/${qty}</span>
+                            </div>
+                            <hr style="border:none;border-top:1px solid #000;margin:1mm 0;">
+                            <div style="text-align:center;font-size:13px;font-weight:700;font-family:monospace;">${tracking}</div>
+                            <hr style="border:none;border-top:1px solid #000;margin:1mm 0;">
+                            <div style="display:flex;align-items:center;justify-content:center;">${codeHtml}</div>
+                            <hr style="border:none;border-top:1px solid #000;margin:1mm 0;">
+                            <div style="text-align:center;font-size:10px;font-weight:700;">MADE IN CHINA</div>
+                        </div>
+                    `;
+                } else if (labelStyle === 'style13') {
+                    styleHtml = `
+                        <div style="width:100%;height:100%;display:flex;flex-direction:column;padding:0;">
+                            <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:3mm;">
+                                <div style="font-size:14px;font-weight:700;margin-bottom:2mm;">${modeText}</div>
+                                <div style="font-size:26px;font-weight:900;">${i}/${qty}</div>
+                                <div style="font-size:12px;font-weight:700;font-family:monospace;margin:2mm 0;">${tracking}</div>
+                                ${codeHtml}
+                            </div>
+                            <div style="background:#000;color:#fff;display:flex;justify-content:space-between;align-items:center;padding:2mm 3mm;font-size:11px;font-weight:700;">
                                 <span>${modeText}</span>
-                                <span style="font-size: 24px; font-weight: 900;">${i}/${qty}</span>
-                            </div>
-                            <div style="width: 100%; text-align: center; font-size: 16px; font-weight: 800; font-family: monospace; margin: 1mm 0;">${tracking}</div>
-                            <div style="width: 100%; height: 35mm; display: flex; align-items: center; justify-content: center; gap: 3mm;">
-                                ${codeHtml}
-                            </div>
-                            <div style="width: 100%; text-align: center; font-size: 12px; font-weight: bold;">MADE IN CHINA</div>
-                        </div>
-                    `;
-                } else if (labelStyle === 'detailed') {
-                    const now = new Date();
-                    const dateStr = now.toLocaleDateString('zh-CN');
-                    const timeStr = now.toLocaleTimeString('zh-CN');
-                    styleHtml = `
-                        <div style="width: 100%; height: 100%; display: flex; flex-direction: column; padding: 3mm;">
-                            <div style="width: 100%; display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #000; padding-bottom: 2mm; margin-bottom: 2mm;">
-                                <div style="font-size: 18px; font-weight: bold;">${modeText}</div>
-                                <div style="font-size: 28px; font-weight: 900;">${i} / ${qty}</div>
-                            </div>
-                            <div style="width: 100%; text-align: center; font-size: 20px; font-weight: 800; font-family: monospace; margin: 2mm 0; padding: 2mm; border: 2px solid #000;">${tracking}</div>
-                            <div style="width: 100%; height: 35mm; display: flex; align-items: center; justify-content: center; gap: 5mm; margin: 2mm 0;">
-                                ${codeHtml}
-                            </div>
-                            <div style="width: 100%; display: flex; justify-content: space-between; font-size: 11px; color: #666; margin-top: auto;">
-                                <div>日期: ${dateStr} ${timeStr}</div>
-                                <div style="font-weight: bold; font-size: 13px;">MADE IN CHINA</div>
+                                <span>MADE IN CHINA</span>
                             </div>
                         </div>
                     `;
-                } else if (labelStyle === 'elegant') {
+                } else if (labelStyle === 'style14') {
                     styleHtml = `
-                        <div style="width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: space-between; padding: 3mm; background: linear-gradient(145deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%); color: #fff; border-radius: 2mm;">
-                            <div style="width: 100%; text-align: center; font-size: 14px; font-weight: 600; letter-spacing: 2px; text-transform: uppercase; color: #e94560; padding-bottom: 2mm; border-bottom: 1px solid rgba(233,69,96,0.3);">${modeText}</div>
-                            <div style="width: 100%; text-align: center; margin: 2mm 0;">
-                                <div style="font-size: 42px; font-weight: 900; background: linear-gradient(135deg, #e94560, #f5af19); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">${i} / ${qty}</div>
-                                <div style="font-size: 16px; font-weight: 700; font-family: monospace; color: #53a8b6; margin-top: 2mm; letter-spacing: 1px;">${tracking}</div>
-                            </div>
-                            <div style="width: 100%; height: 38mm; display: flex; align-items: center; justify-content: center; gap: 5mm; background: rgba(255,255,255,0.05); border-radius: 2mm; padding: 2mm;">
-                                ${codeHtml}
-                            </div>
-                            <div style="width: 100%; text-align: center; font-size: 11px; font-weight: 700; color: #53a8b6; letter-spacing: 3px; padding-top: 2mm;">MADE IN CHINA</div>
+                        <div style="width:100%;height:100%;display:flex;flex-direction:column;padding:3mm;border:2px solid #333;border-radius:4mm;">
+                            <div style="text-align:center;font-size:13px;font-weight:700;color:#555;">${modeText}</div>
+                            <div style="text-align:center;font-size:28px;font-weight:900;margin:1mm 0;">${i}/${qty}</div>
+                            <div style="text-align:center;font-size:12px;font-weight:700;font-family:monospace;margin-bottom:2mm;">${tracking}</div>
+                            <div style="flex:1;display:flex;align-items:center;justify-content:center;">${codeHtml}</div>
+                            <div style="text-align:center;font-size:10px;color:#888;margin-top:2mm;">MADE IN CHINA</div>
                         </div>
                     `;
-                } else if (labelStyle === 'bold') {
+                } else if (labelStyle === 'style15') {
                     styleHtml = `
-                        <div style="width: 100%; height: 100%; display: flex; flex-direction: column; padding: 0; background: #fff;">
-                            <div style="width: 100%; background: #000; color: #fff; text-align: center; font-size: 22px; font-weight: 900; padding: 3mm 0; letter-spacing: 3px;">${modeText}</div>
-                            <div style="width: 100%; text-align: center; padding: 3mm 0;">
-                                <div style="font-size: 56px; font-weight: 900; color: #000; line-height: 1;">${i}/${qty}</div>
+                        <div style="width:100%;height:100%;display:flex;flex-direction:column;padding:3mm;">
+                            <div style="border-top:3px solid #000;border-bottom:1px solid #000;text-align:center;padding:2mm 0;margin-bottom:2mm;">
+                                <div style="font-size:16px;font-weight:900;">${modeText}</div>
                             </div>
-                            <div style="width: 100%; background: #000; color: #fff; text-align: center; font-size: 18px; font-weight: 800; font-family: monospace; padding: 2mm 0; letter-spacing: 2px;">${tracking}</div>
-                            <div style="width: 100%; height: 35mm; display: flex; align-items: center; justify-content: center; gap: 5mm; padding: 2mm;">
-                                ${codeHtml}
+                            <div style="text-align:center;font-size:22px;font-weight:900;">${i}/${qty}</div>
+                            <div style="text-align:center;font-size:12px;font-weight:700;font-family:monospace;margin:1mm 0;">${tracking}</div>
+                            <div style="flex:1;display:flex;align-items:center;justify-content:center;">${codeHtml}</div>
+                            <div style="border-top:1px solid #000;border-bottom:3px solid #000;text-align:center;padding:2mm 0;margin-top:2mm;">
+                                <div style="font-size:11px;font-weight:700;">MADE IN CHINA</div>
                             </div>
-                            <div style="width: 100%; background: #000; color: #fff; text-align: center; font-size: 14px; font-weight: 800; padding: 2mm 0; letter-spacing: 4px;">MADE IN CHINA</div>
                         </div>
                     `;
-                } else if (labelStyle === 'minimal') {
+                } else if (labelStyle === 'style16') {
                     styleHtml = `
-                        <div style="width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 4mm; background: #fff; border: 1px solid #e0e0e0;">
-                            <div style="font-size: 12px; color: #999; letter-spacing: 2px; margin-bottom: 3mm;">${modeText}</div>
-                            <div style="font-size: 36px; font-weight: 300; color: #333; margin-bottom: 2mm;">${i} / ${qty}</div>
-                            <div style="font-size: 14px; font-family: monospace; color: #666; margin-bottom: 4mm;">${tracking}</div>
-                            <div style="width: 100%; height: 40mm; display: flex; align-items: center; justify-content: center; gap: 5mm;">
-                                ${codeHtml}
+                        <div style="width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:3mm;">
+                            <div style="font-size:12px;font-weight:600;color:#666;margin-bottom:1mm;">${modeText}</div>
+                            <div style="display:flex;align-items:center;justify-content:center;width:100%;flex:1;">${codeHtml}</div>
+                            <div style="font-size:20px;font-weight:900;margin-top:2mm;">${i}/${qty}</div>
+                            <div style="font-size:11px;font-weight:700;font-family:monospace;margin-top:1mm;">${tracking}</div>
+                            <div style="width:60%;border-top:1px solid #000;margin-top:2mm;"></div>
+                            <div style="font-size:9px;font-weight:700;margin-top:1mm;">MADE IN CHINA</div>
+                        </div>
+                    `;
+                } else if (labelStyle === 'style17') {
+                    styleHtml = `
+                        <div style="width:100%;height:100%;display:flex;flex-direction:column;justify-content:space-between;padding:3mm;">
+                            <div style="font-size:14px;font-weight:700;">${modeText}</div>
+                            <div style="font-size:11px;margin-top:1mm;">件数: <span style="font-size:22px;font-weight:900;">${i}</span> / ${qty}</div>
+                            <div style="font-size:11px;margin-top:1mm;">单号: <span style="font-family:monospace;font-weight:700;">${tracking}</span></div>
+                            <div style="display:flex;align-items:center;justify-content:flex-start;margin-top:1mm;">${codeHtml}</div>
+                            <div style="font-size:9px;margin-top:auto;">MADE IN CHINA</div>
+                        </div>
+                    `;
+                } else if (labelStyle === 'style18') {
+                    styleHtml = `
+                        <div style="width:100%;height:100%;display:flex;flex-direction:column;padding:2mm;">
+                            <div style="display:flex;align-items:stretch;">
+                                <div style="background:#000;color:#fff;font-size:48px;font-weight:900;min-width:20mm;display:flex;align-items:center;justify-content:center;">${i}</div>
+                                <div style="flex:1;padding:2mm 3mm;display:flex;flex-direction:column;justify-content:space-between;">
+                                    <div style="font-size:12px;font-weight:700;">${modeText}</div>
+                                    <div style="font-size:14px;font-weight:900;">${i}/${qty}</div>
+                                    <div style="font-size:11px;font-weight:700;font-family:monospace;">${tracking}</div>
+                                </div>
                             </div>
-                            <div style="font-size: 10px; color: #bbb; letter-spacing: 3px; margin-top: auto;">MADE IN CHINA</div>
+                            <div style="flex:1;display:flex;align-items:center;justify-content:center;margin-top:2mm;">${codeHtml}</div>
+                            <div style="text-align:center;font-size:9px;font-weight:700;border-top:1px solid #000;padding-top:1mm;margin-top:2mm;">MADE IN CHINA</div>
+                        </div>
+                    `;
+                } else if (labelStyle === 'style19') {
+                    styleHtml = `
+                        <div style="width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:3mm;background:repeating-linear-gradient(45deg,transparent,transparent 5px,rgba(0,0,0,0.03) 5px,rgba(0,0,0,0.03) 10px);">
+                            <div style="font-size:12px;font-weight:700;color:#555;letter-spacing:1px;">${modeText}</div>
+                            <div style="font-size:24px;font-weight:900;margin:2mm 0;">${i}/${qty}</div>
+                            <div style="font-size:11px;font-weight:700;font-family:monospace;">${tracking}</div>
+                            <div style="flex:1;display:flex;align-items:center;justify-content:center;margin-top:2mm;">${codeHtml}</div>
+                            <div style="font-size:9px;color:#aaa;margin-top:2mm;">MADE IN CHINA</div>
+                        </div>
+                    `;
+                } else if (labelStyle === 'style20') {
+                    styleHtml = `
+                        <div style="width:100%;height:100%;display:flex;flex-direction:column;padding:0;border:1px solid #000;">
+                            <div style="display:flex;border-bottom:1px solid #000;">
+                                <div style="flex:1;padding:2mm;border-right:1px solid #000;">
+                                    <div style="font-size:9px;color:#666;">运输方式</div>
+                                    <div style="font-size:12px;font-weight:700;">${modeText}</div>
+                                </div>
+                                <div style="flex:1;padding:2mm;border-right:1px solid #000;">
+                                    <div style="font-size:9px;color:#666;">件数</div>
+                                    <div style="font-size:16px;font-weight:900;">${i}/${qty}</div>
+                                </div>
+                                <div style="flex:2;padding:2mm;">
+                                    <div style="font-size:9px;color:#666;">单号</div>
+                                    <div style="font-size:12px;font-weight:700;font-family:monospace;">${tracking}</div>
+                                </div>
+                            </div>
+                            <div style="flex:1;display:flex;align-items:center;justify-content:center;padding:2mm;">${codeHtml}</div>
+                            <div style="text-align:center;font-size:9px;font-weight:700;border-top:1px solid #000;padding:1mm 0;">MADE IN CHINA</div>
                         </div>
                     `;
                 }
