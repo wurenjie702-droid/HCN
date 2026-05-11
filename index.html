@@ -18877,6 +18877,7 @@ Content-Type: application/json</pre>
             
             trackingHistory.push(entry);
             saveData('trackingHistory', trackingHistory);
+            try { localStorage.setItem('trackingHistory', JSON.stringify(trackingHistory)); } catch(e) {}
             
             const order = orderType === 'business' 
                 ? businessOrders.find(o => o.id === orderId) 
@@ -18902,6 +18903,13 @@ Content-Type: application/json</pre>
         function loadOrderTrackingList(orderId, orderType) {
             const listEl = document.getElementById(`${orderType}-order-tracking-list`);
             if (!listEl) return;
+            
+            if (!trackingHistory || trackingHistory.length === 0) {
+                try {
+                    const saved = localStorage.getItem('trackingHistory');
+                    if (saved) trackingHistory = JSON.parse(saved);
+                } catch(e) {}
+            }
             
             const entries = trackingHistory.filter(t => 
                 t.shipmentId === orderId || t.shipment_id === orderId || 
@@ -21753,11 +21761,26 @@ Content-Type: application/json</pre>
 
                 for (let i = 0; i < pages.length; i++) {
                     const page = pages[i];
-                    const canvas = await html2canvas(page, { scale: 3, useCORS: true, backgroundColor: '#ffffff' });
-                    const imgData = canvas.toDataURL('image/jpeg', 1.0);
+                    const canvas = await html2canvas(page, { scale: 3, useCORS: true, backgroundColor: '#ffffff', logging: false, useCORS: true });
+                    const imgData = canvas.toDataURL('image/png', 1.0);
 
                     if (i > 0) pdf.addPage();
-                    pdf.addImage(imgData, 'JPEG', 0, 0, 100, 100);
+                    const pdfW = 100;
+                    const pdfH = 100;
+                    const canvasRatio = canvas.width / canvas.height;
+                    let imgW, imgH, offsetX, offsetY;
+                    if (canvasRatio > 1) {
+                        imgW = pdfW;
+                        imgH = pdfW / canvasRatio;
+                        offsetX = 0;
+                        offsetY = (pdfH - imgH) / 2;
+                    } else {
+                        imgH = pdfH;
+                        imgW = pdfH * canvasRatio;
+                        offsetX = (pdfW - imgW) / 2;
+                        offsetY = 0;
+                    }
+                    pdf.addImage(imgData, 'PNG', offsetX, offsetY, imgW, imgH);
                 }
 
                 const name = `物流标签_${new Date().toISOString().slice(0,10)}.pdf`;
@@ -24669,6 +24692,12 @@ PORT=3000</pre>
             responsiveContainer.className = 'labels-preview-container-responsive';
 
             const isInquiryNumber = prefix.length >= 12 && /^HCN\d+$/.test(prefix);
+            let baseTracking = '';
+            if (!isInquiryNumber) {
+                const dateStr = new Date().toISOString().slice(2, 10).replace(/-/g, '');
+                const randomSuffix = Math.floor(Math.random() * 9000 + 1000);
+                baseTracking = `${prefix}${dateStr}${randomSuffix}`;
+            }
 
             for(let i = 1; i <= qty; i++) {
                 let tracking;
@@ -24679,9 +24708,7 @@ PORT=3000</pre>
                         tracking = `${prefix}-${i}`;
                     }
                 } else {
-                    const dateStr = new Date().toISOString().slice(2, 10).replace(/-/g, '');
-                    const randomSuffix = Math.floor(Math.random() * 9000 + 1000);
-                    tracking = `${prefix}${dateStr}${randomSuffix}${i}`;
+                    tracking = `${baseTracking}${i}`;
                 }
                 
                 const barcodeData = `${tracking}-${i}/${qty}`;
@@ -24689,6 +24716,8 @@ PORT=3000</pre>
                 labelDiv.className = 'label-preview-responsive';
                 
                 let codeHtml = '';
+                let barcodeHtml = '';
+                let qrcodeHtml = '';
                 
                 if (codeType === 'barcode' || codeType === 'both') {
                     const tempCanvas = document.getElementById('temp-canvas');
@@ -24698,7 +24727,7 @@ PORT=3000</pre>
                         margin: 10
                     });
                     const imgData = tempCanvas.toDataURL("image/jpeg", 1.0);
-                    codeHtml += `<img src="${imgData}" style="width: 100%; max-height: 100%; height: auto; display: block;">`;
+                    barcodeHtml = `<img src="${imgData}" style="width:100%;max-height:35mm;object-fit:contain;display:block;">`;
                 }
                 
                 if (codeType === 'qrcode' || codeType === 'both') {
@@ -24707,11 +24736,17 @@ PORT=3000</pre>
                         qr.addData(barcodeData);
                         qr.make();
                         const qrData = qr.createDataURL(4, 2);
-                        codeHtml += `<img src="${qrData}" style="width: ${codeType === 'both' ? '45%' : '100%'}; max-height: 100%; height: auto; display: block;">`;
+                        qrcodeHtml = `<img src="${qrData}" style="width:${codeType === 'both' ? '45%' : '60%'};aspect-ratio:1/1;object-fit:contain;display:block;">`;
                     } catch (err) {
                         console.error('QR生成失败:', err);
-                        codeHtml += `<div style="padding:10px;text-align:center;font-size:11px;color:#999;">二维码生成失败</div>`;
+                        qrcodeHtml = `<div style="padding:10px;text-align:center;font-size:11px;color:#999;">二维码生成失败</div>`;
                     }
+                }
+
+                if (codeType === 'both') {
+                    codeHtml = `<div style="display:flex;flex-direction:column;align-items:center;width:100%;">${qrcodeHtml}${barcodeHtml}</div>`;
+                } else {
+                    codeHtml = barcodeHtml + qrcodeHtml;
                 }
 
                 let styleHtml = '';
@@ -25829,6 +25864,7 @@ function startCfAutoSync() {
             const syncPayload = {
                 customers: customers || [],
                 shipments: shipments || [],
+                trackingHistory: trackingHistory || [],
                 businessOrders: businessOrders || [],
                 containerOrders: containerOrders || [],
                 warehouseEntries: warehouseEntries || [],
