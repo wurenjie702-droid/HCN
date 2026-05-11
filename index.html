@@ -7668,6 +7668,7 @@ Content-Type: application/json</pre>
                     if (cloudData.tracking_history && cloudData.tracking_history.length > 0) {
                         trackingHistory = cloudData.tracking_history;
                         safeSetItem('trackingHistory', JSON.stringify(trackingHistory));
+                        try { localStorage.setItem('trackingHistory', JSON.stringify(trackingHistory)); } catch(e) {}
                     }
                     if (cloudData.business_orders && cloudData.business_orders.length > 0) {
                         businessOrders = normalizeBusinessOrders(cloudData.business_orders);
@@ -18839,7 +18840,7 @@ Content-Type: application/json</pre>
             document.getElementById('archive-count').textContent = filteredShipments.length;
         }
 
-        function addTrackingEntry(orderId, orderType) {
+        async function addTrackingEntry(orderId, orderType) {
             const statusEl = document.getElementById(`${orderType}-order-tracking-status`);
             const customStatusEl = document.getElementById(`${orderType}-order-tracking-custom-status`);
             const locationEl = document.getElementById(`${orderType}-order-tracking-location`);
@@ -18876,7 +18877,7 @@ Content-Type: application/json</pre>
             };
             
             trackingHistory.push(entry);
-            saveData('trackingHistory', trackingHistory);
+            await saveData('trackingHistory', trackingHistory);
             try { localStorage.setItem('trackingHistory', JSON.stringify(trackingHistory)); } catch(e) {}
             
             const order = orderType === 'business' 
@@ -18893,6 +18894,8 @@ Content-Type: application/json</pre>
             }
             
             statusEl.value = '';
+            customStatusEl.value = '';
+            customStatusEl.style.display = 'none';
             locationEl.value = '';
             descEl.value = '';
             
@@ -18900,15 +18903,25 @@ Content-Type: application/json</pre>
             showNotification('轨迹已添加', 'success');
         }
         
-        function loadOrderTrackingList(orderId, orderType) {
+        async function loadOrderTrackingList(orderId, orderType) {
             const listEl = document.getElementById(`${orderType}-order-tracking-list`);
             if (!listEl) return;
             
             if (!trackingHistory || trackingHistory.length === 0) {
                 try {
-                    const saved = localStorage.getItem('trackingHistory');
-                    if (saved) trackingHistory = JSON.parse(saved);
-                } catch(e) {}
+                    const saved = await dbGetItem('trackingHistory');
+                    if (saved && Array.isArray(saved) && saved.length > 0) {
+                        trackingHistory = saved;
+                    } else {
+                        const ls = localStorage.getItem('trackingHistory');
+                        if (ls) trackingHistory = JSON.parse(ls);
+                    }
+                } catch(e) {
+                    try {
+                        const ls = localStorage.getItem('trackingHistory');
+                        if (ls) trackingHistory = JSON.parse(ls);
+                    } catch(e2) {}
+                }
             }
             
             const entries = trackingHistory.filter(t => 
@@ -18949,9 +18962,10 @@ Content-Type: application/json</pre>
             }).join('');
         }
         
-        function deleteTrackingEntry(entryId, orderId, orderType) {
+        async function deleteTrackingEntry(entryId, orderId, orderType) {
             trackingHistory = trackingHistory.filter(t => t.id !== entryId);
-            saveData('trackingHistory', trackingHistory);
+            await saveData('trackingHistory', trackingHistory);
+            try { localStorage.setItem('trackingHistory', JSON.stringify(trackingHistory)); } catch(e) {}
             loadOrderTrackingList(orderId, orderType);
             showNotification('轨迹已删除', 'success');
         }
@@ -18965,7 +18979,7 @@ Content-Type: application/json</pre>
             });
         }
 
-        function updateShipmentStatus(shipmentId, newStatus) {
+        async function updateShipmentStatus(shipmentId, newStatus) {
             const shipment = shipments.find(s => s.id === shipmentId);
             if (shipment) {
                 const oldStatus = shipment.status;
@@ -18985,8 +18999,9 @@ Content-Type: application/json</pre>
                 };
                 trackingHistory.push(trackingEntry);
                 
-                saveData('shipments', shipments);
-                saveData('trackingHistory', trackingHistory);
+                await saveData('shipments', shipments);
+                await saveData('trackingHistory', trackingHistory);
+                try { localStorage.setItem('trackingHistory', JSON.stringify(trackingHistory)); } catch(e) {}
                 
                 const statusText = { 'pending': '待处理', 'processing': '处理中', 'picked-up': '已揽收', 'shipped': '已发货', 'in-transit': '运输中', 'clearance': '清关中', 'out-for-delivery': '派送中', 'delivered': '已送达', 'returned': '已退回', 'exception': '异常' }[newStatus] || newStatus;
                 showNotification(`运单 ${shipmentId} 状态已更新为: ${statusText}`, 'success');
@@ -25482,6 +25497,7 @@ async function syncToCloudflare() {
         const syncPayload = {
             customers: customers || [],
             shipments: shipments || [],
+            trackingHistory: trackingHistory || [],
             businessOrders: businessOrders || [],
             containerOrders: containerOrders || [],
             warehouseEntries: warehouseEntries || [],
@@ -25587,6 +25603,11 @@ async function restoreFromCloudflare() {
             if (cloudData.inquiry_records && cloudData.inquiry_records.length > 0) {
                 inquiryRecords = cloudData.inquiry_records;
                 safeSetItem('inquiryRecords', JSON.stringify(inquiryRecords));
+            }
+            if (cloudData.tracking_history && cloudData.tracking_history.length > 0) {
+                trackingHistory = cloudData.tracking_history;
+                safeSetItem('trackingHistory', JSON.stringify(trackingHistory));
+                try { localStorage.setItem('trackingHistory', JSON.stringify(trackingHistory)); } catch(e) {}
             }
             if (cloudData.settings && cloudData.settings.length > 0) {
                 const cloudSettings = cloudData.settings[0] || {};
@@ -25695,6 +25716,7 @@ async function syncToCloudflareSidebar() {
         const syncPayload = {
             customers: customers || [],
             shipments: shipments || [],
+            trackingHistory: trackingHistory || [],
             businessOrders: businessOrders || [],
             containerOrders: containerOrders || [],
             warehouseEntries: warehouseEntries || [],
@@ -25802,6 +25824,11 @@ async function restoreFromCloudflareSidebar() {
             if (cloudData.inquiry_records && cloudData.inquiry_records.length > 0) {
                 inquiryRecords = cloudData.inquiry_records;
                 safeSetItem('inquiryRecords', JSON.stringify(inquiryRecords));
+            }
+            if (cloudData.tracking_history && cloudData.tracking_history.length > 0) {
+                trackingHistory = cloudData.tracking_history;
+                safeSetItem('trackingHistory', JSON.stringify(trackingHistory));
+                try { localStorage.setItem('trackingHistory', JSON.stringify(trackingHistory)); } catch(e) {}
             }
             if (cloudData.settings && cloudData.settings.length > 0) {
                 const cloudSettings = cloudData.settings[0] || {};
@@ -26060,6 +26087,16 @@ async function pullCloudflareData(workerUrl) {
             if (cloudStr !== localStr) {
                 inquiryRecords = cloudData.inquiry_records;
                 safeSetItem('inquiryRecords', JSON.stringify(inquiryRecords));
+                hasChanges = true;
+            }
+        }
+        if (cloudData.tracking_history && cloudData.tracking_history.length > 0) {
+            const cloudStr = JSON.stringify(cloudData.tracking_history);
+            const localStr = JSON.stringify(trackingHistory || []);
+            if (cloudStr !== localStr) {
+                trackingHistory = cloudData.tracking_history;
+                safeSetItem('trackingHistory', JSON.stringify(trackingHistory));
+                try { localStorage.setItem('trackingHistory', JSON.stringify(trackingHistory)); } catch(e) {}
                 hasChanges = true;
             }
         }
