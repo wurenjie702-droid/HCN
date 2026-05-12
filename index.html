@@ -13825,12 +13825,16 @@ Content-Type: application/json</pre>
             order.deletedAt = new Date().toISOString();
             order.deleteType = 'soft';
             deletedBusinessOrders.push(order);
-            saveData('deletedBusinessOrders', deletedBusinessOrders);
             
             businessOrders = businessOrders.filter(o => o.id !== orderId);
-            syncDeleteFromCloud('businessOrders', orderId).then(() => {
-                saveData('businessOrders', businessOrders);
-            });
+            
+            saveData('businessOrders', businessOrders);
+            saveData('deletedBusinessOrders', deletedBusinessOrders);
+            try { localStorage.setItem('businessOrders', JSON.stringify(businessOrders)); } catch(e) {}
+            try { localStorage.setItem('deletedBusinessOrders', JSON.stringify(deletedBusinessOrders)); } catch(e) {}
+            
+            syncDeleteFromCloud('businessOrders', orderId);
+            if (cloudflareConnected) localStorage.setItem('cfNeedsSync', 'true');
             
             hideModal();
             loadBusinessOrders();
@@ -13844,12 +13848,16 @@ Content-Type: application/json</pre>
             order.deletedAt = new Date().toISOString();
             order.deleteType = 'hard';
             deletedBusinessOrders.push(order);
-            saveData('deletedBusinessOrders', deletedBusinessOrders);
             
             businessOrders = businessOrders.filter(o => o.id !== orderId);
-            syncHardDeleteFromCloud('businessOrders', orderId).then(() => {
-                saveData('businessOrders', businessOrders);
-            });
+            
+            saveData('businessOrders', businessOrders);
+            saveData('deletedBusinessOrders', deletedBusinessOrders);
+            try { localStorage.setItem('businessOrders', JSON.stringify(businessOrders)); } catch(e) {}
+            try { localStorage.setItem('deletedBusinessOrders', JSON.stringify(deletedBusinessOrders)); } catch(e) {}
+            
+            syncHardDeleteFromCloud('businessOrders', orderId);
+            if (cloudflareConnected) localStorage.setItem('cfNeedsSync', 'true');
             
             hideModal();
             loadBusinessOrders();
@@ -13883,12 +13891,16 @@ Content-Type: application/json</pre>
             order.deletedAt = new Date().toISOString();
             order.deleteType = 'soft';
             deletedContainerOrders.push(order);
-            saveData('deletedContainerOrders', deletedContainerOrders);
             
             containerOrders = containerOrders.filter(o => o.id !== orderId);
-            syncDeleteFromCloud('containerOrders', orderId).then(() => {
-                saveData('containerOrders', containerOrders);
-            });
+            
+            saveData('containerOrders', containerOrders);
+            saveData('deletedContainerOrders', deletedContainerOrders);
+            try { localStorage.setItem('containerOrders', JSON.stringify(containerOrders)); } catch(e) {}
+            try { localStorage.setItem('deletedContainerOrders', JSON.stringify(deletedContainerOrders)); } catch(e) {}
+            
+            syncDeleteFromCloud('containerOrders', orderId);
+            if (cloudflareConnected) localStorage.setItem('cfNeedsSync', 'true');
             
             hideModal();
             loadContainerOrders();
@@ -13902,12 +13914,16 @@ Content-Type: application/json</pre>
             order.deletedAt = new Date().toISOString();
             order.deleteType = 'hard';
             deletedContainerOrders.push(order);
-            saveData('deletedContainerOrders', deletedContainerOrders);
             
             containerOrders = containerOrders.filter(o => o.id !== orderId);
-            syncHardDeleteFromCloud('containerOrders', orderId).then(() => {
-                saveData('containerOrders', containerOrders);
-            });
+            
+            saveData('containerOrders', containerOrders);
+            saveData('deletedContainerOrders', deletedContainerOrders);
+            try { localStorage.setItem('containerOrders', JSON.stringify(containerOrders)); } catch(e) {}
+            try { localStorage.setItem('deletedContainerOrders', JSON.stringify(deletedContainerOrders)); } catch(e) {}
+            
+            syncHardDeleteFromCloud('containerOrders', orderId);
+            if (cloudflareConnected) localStorage.setItem('cfNeedsSync', 'true');
             
             hideModal();
             loadContainerOrders();
@@ -15837,13 +15853,16 @@ Content-Type: application/json</pre>
                     deletedEntry.deletedAt = new Date().toISOString();
                     deletedEntry.deleteType = 'soft';
                     deletedWarehouseEntries.push(deletedEntry);
-                    saveData('deletedWarehouseEntries', deletedWarehouseEntries);
                 }
                 warehouseEntries = warehouseEntries.filter(entry => entry.id !== entryId);
-                // 先删除云端数据，再保存本地数据
-                syncDeleteFromCloud('warehouseEntries', entryId).then(() => {
-                    saveData('warehouseEntries', warehouseEntries);
-                });
+                
+                saveData('warehouseEntries', warehouseEntries);
+                saveData('deletedWarehouseEntries', deletedWarehouseEntries);
+                try { localStorage.setItem('warehouseEntries', JSON.stringify(warehouseEntries)); } catch(e) {}
+                
+                syncDeleteFromCloud('warehouseEntries', entryId);
+                if (cloudflareConnected) localStorage.setItem('cfNeedsSync', 'true');
+                
                 loadWarehouseData();
                 updateWarehouseStatistics();
             }
@@ -16547,13 +16566,16 @@ Content-Type: application/json</pre>
                     deletedEntry.deletedAt = new Date().toISOString();
                     deletedEntry.deleteType = 'soft';
                     deletedOutboundEntries.push(deletedEntry);
-                    saveData('deletedOutboundEntries', deletedOutboundEntries);
                 }
                 outboundEntries = outboundEntries.filter(entry => entry.id !== entryId);
-                // 先删除云端数据，再保存本地数据
-                syncDeleteFromCloud('outboundEntries', entryId).then(() => {
-                    saveData('outboundEntries', outboundEntries);
-                });
+                
+                saveData('outboundEntries', outboundEntries);
+                saveData('deletedOutboundEntries', deletedOutboundEntries);
+                try { localStorage.setItem('outboundEntries', JSON.stringify(outboundEntries)); } catch(e) {}
+                
+                syncDeleteFromCloud('outboundEntries', entryId);
+                if (cloudflareConnected) localStorage.setItem('cfNeedsSync', 'true');
+                
                 loadOutboundData();
                 updateOutboundStatistics();
             }
@@ -19324,21 +19346,21 @@ Content-Type: application/json</pre>
             const shipment = shipments.find(s => s.id === id);
             if (!shipment) return;
             
-            // 添加到历史删除列表
             deletedShipments.push({
                 ...shipment,
                 deletedAt: new Date().toISOString(),
                 deleteType: 'soft'
             });
             
-            // 从主列表中移除
             shipments = shipments.filter(s => s.id !== id);
             
-            // 先删除云端数据，再保存本地数据
-            syncDeleteFromCloud('shipments', id).then(() => {
-                saveData('shipments', shipments);
-                saveData('deletedShipments', deletedShipments);
-            });
+            saveData('shipments', shipments);
+            saveData('deletedShipments', deletedShipments);
+            try { localStorage.setItem('shipments', JSON.stringify(shipments)); } catch(e) {}
+            try { localStorage.setItem('deletedShipments', JSON.stringify(deletedShipments)); } catch(e) {}
+            
+            syncDeleteFromCloud('shipments', id);
+            if (cloudflareConnected) localStorage.setItem('cfNeedsSync', 'true');
             
             loadArchives();
             updateDashboard();
@@ -19355,21 +19377,21 @@ Content-Type: application/json</pre>
             const shipment = shipments.find(s => s.id === id);
             if (!shipment) return;
             
-            // 添加到历史删除列表（标记为永久删除）
             deletedShipments.push({
                 ...shipment,
                 deletedAt: new Date().toISOString(),
                 deleteType: 'hard'
             });
             
-            // 从主列表中移除
             shipments = shipments.filter(s => s.id !== id);
             
-            // 先删除云端数据，再保存本地数据
-            syncDeleteFromCloud('shipments', id).then(() => {
-                saveData('shipments', shipments);
-                saveData('deletedShipments', deletedShipments);
-            });
+            saveData('shipments', shipments);
+            saveData('deletedShipments', deletedShipments);
+            try { localStorage.setItem('shipments', JSON.stringify(shipments)); } catch(e) {}
+            try { localStorage.setItem('deletedShipments', JSON.stringify(deletedShipments)); } catch(e) {}
+            
+            syncDeleteFromCloud('shipments', id);
+            if (cloudflareConnected) localStorage.setItem('cfNeedsSync', 'true');
             
             loadArchives();
             updateDashboard();
@@ -20750,21 +20772,21 @@ Content-Type: application/json</pre>
             const customer = customers.find(c => c.id === customerId);
             if (!customer) return;
             
-            // 添加到历史删除列表
             deletedCustomers.push({
                 ...customer,
                 deletedAt: new Date().toISOString(),
                 deleteType: 'soft'
             });
             
-            // 从主列表中移除
             customers = customers.filter(c => c.id !== customerId);
             
-            // 先删除云端数据，再保存本地数据
-            syncDeleteFromCloud('customers', customerId).then(() => {
-                saveData('customers', customers);
-                saveData('deletedCustomers', deletedCustomers);
-            });
+            saveData('customers', customers);
+            saveData('deletedCustomers', deletedCustomers);
+            try { localStorage.setItem('customers', JSON.stringify(customers)); } catch(e) {}
+            try { localStorage.setItem('deletedCustomers', JSON.stringify(deletedCustomers)); } catch(e) {}
+            
+            syncDeleteFromCloud('customers', customerId);
+            if (cloudflareConnected) localStorage.setItem('cfNeedsSync', 'true');
             
             renderCustomerTable();
             hideModal();
@@ -20780,21 +20802,21 @@ Content-Type: application/json</pre>
             const customer = customers.find(c => c.id === customerId);
             if (!customer) return;
             
-            // 添加到历史删除列表（标记为永久删除）
             deletedCustomers.push({
                 ...customer,
                 deletedAt: new Date().toISOString(),
                 deleteType: 'hard'
             });
             
-            // 从主列表中移除
             customers = customers.filter(c => c.id !== customerId);
             
-            // 先删除云端数据，再保存本地数据
-            syncDeleteFromCloud('customers', customerId).then(() => {
-                saveData('customers', customers);
-                saveData('deletedCustomers', deletedCustomers);
-            });
+            saveData('customers', customers);
+            saveData('deletedCustomers', deletedCustomers);
+            try { localStorage.setItem('customers', JSON.stringify(customers)); } catch(e) {}
+            try { localStorage.setItem('deletedCustomers', JSON.stringify(deletedCustomers)); } catch(e) {}
+            
+            syncDeleteFromCloud('customers', customerId);
+            if (cloudflareConnected) localStorage.setItem('cfNeedsSync', 'true');
             
             renderCustomerTable();
             hideModal();
@@ -26014,27 +26036,40 @@ async function pullCloudflareData(workerUrl) {
 
         const cloudData = result.data;
         let hasChanges = false;
+        
+        const allDeletedIds = new Set();
+        const deletedArrays = [deletedCustomers, deletedShipments, deletedBusinessOrders, deletedContainerOrders, deletedWarehouseEntries, deletedOutboundEntries];
+        deletedArrays.forEach(arr => {
+            (arr || []).forEach(item => allDeletedIds.add(item.id));
+        });
+
+        function filterDeleted(items) {
+            return (items || []).filter(item => !allDeletedIds.has(item.id));
+        }
 
         if (cloudData.customers && cloudData.customers.length > 0) {
-            const cloudStr = JSON.stringify(cloudData.customers);
+            const filtered = filterDeleted(cloudData.customers);
+            const cloudStr = JSON.stringify(filtered);
             const localStr = JSON.stringify(customers || []);
             if (cloudStr !== localStr) {
-                customers = cloudData.customers;
+                customers = filtered;
                 safeSetItem('customers', JSON.stringify(customers));
                 hasChanges = true;
             }
         }
         if (cloudData.shipments && cloudData.shipments.length > 0) {
-            const cloudStr = JSON.stringify(cloudData.shipments);
+            const filtered = filterDeleted(cloudData.shipments);
+            const cloudStr = JSON.stringify(filtered);
             const localStr = JSON.stringify(shipments || []);
             if (cloudStr !== localStr) {
-                shipments = cloudData.shipments;
+                shipments = filtered;
                 safeSetItem('shipments', JSON.stringify(shipments));
                 hasChanges = true;
             }
         }
         if (cloudData.business_orders && cloudData.business_orders.length > 0) {
-            const normalized = normalizeBusinessOrders(cloudData.business_orders);
+            const filtered = filterDeleted(cloudData.business_orders);
+            const normalized = normalizeBusinessOrders(filtered);
             const cloudStr = JSON.stringify(normalized);
             const localStr = JSON.stringify(businessOrders || []);
             if (cloudStr !== localStr) {
@@ -26044,7 +26079,8 @@ async function pullCloudflareData(workerUrl) {
             }
         }
         if (cloudData.container_orders && cloudData.container_orders.length > 0) {
-            const normalized = normalizeContainerOrders(cloudData.container_orders);
+            const filtered = filterDeleted(cloudData.container_orders);
+            const normalized = normalizeContainerOrders(filtered);
             const cloudStr = JSON.stringify(normalized);
             const localStr = JSON.stringify(containerOrders || []);
             if (cloudStr !== localStr) {
@@ -26054,19 +26090,21 @@ async function pullCloudflareData(workerUrl) {
             }
         }
         if (cloudData.warehouse_entries && cloudData.warehouse_entries.length > 0) {
-            const cloudStr = JSON.stringify(cloudData.warehouse_entries);
+            const filtered = filterDeleted(cloudData.warehouse_entries);
+            const cloudStr = JSON.stringify(filtered);
             const localStr = JSON.stringify(warehouseEntries || []);
             if (cloudStr !== localStr) {
-                warehouseEntries = cloudData.warehouse_entries;
+                warehouseEntries = filtered;
                 safeSetItem('warehouseEntries', JSON.stringify(warehouseEntries));
                 hasChanges = true;
             }
         }
         if (cloudData.outbound_entries && cloudData.outbound_entries.length > 0) {
-            const cloudStr = JSON.stringify(cloudData.outbound_entries);
+            const filtered = filterDeleted(cloudData.outbound_entries);
+            const cloudStr = JSON.stringify(filtered);
             const localStr = JSON.stringify(outboundEntries || []);
             if (cloudStr !== localStr) {
-                outboundEntries = cloudData.outbound_entries;
+                outboundEntries = filtered;
                 safeSetItem('outboundEntries', JSON.stringify(outboundEntries));
                 hasChanges = true;
             }
