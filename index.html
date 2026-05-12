@@ -12966,8 +12966,17 @@ Content-Type: application/json</pre>
                 
                 businessOrders[existingIndex] = order;
                 saveData('businessOrders', businessOrders);
-                // 如果订单ID被修改，立即同步删除旧记录到云端
                 if (orderId !== originalId) {
+                    trackingHistory.forEach(t => {
+                        if (t.shipmentId === originalId || t.shipment_id === originalId || t.orderId === originalId || t.order_id === originalId) {
+                            t.shipmentId = orderId;
+                            t.shipment_id = orderId;
+                            t.orderId = orderId;
+                            t.order_id = orderId;
+                        }
+                    });
+                    saveData('trackingHistory', trackingHistory);
+                    try { localStorage.setItem('trackingHistory', JSON.stringify(trackingHistory)); } catch(e) {}
                     pushLocalDeletionsToCloud();
                 }
                 hideModal();
@@ -13221,7 +13230,7 @@ Content-Type: application/json</pre>
                 { text: '保存', class: 'btn-primary', onclick: `saveBusinessOrder('${orderId}')` }
             ], true);
             
-            setTimeout(() => { recalcBusinessOrderCompanyProfit(); loadOrderTrackingList('${orderId}', 'business'); initTrackingStatusToggle('business'); }, 100);
+            setTimeout(() => { recalcBusinessOrderCompanyProfit(); loadOrderTrackingList(orderId, 'business'); initTrackingStatusToggle('business'); }, 100);
         }
         
         function updateBusinessOrderProfit() {
@@ -13523,8 +13532,17 @@ Content-Type: application/json</pre>
                 
                 containerOrders[existingIndex] = order;
                 saveData('containerOrders', containerOrders);
-                // 如果订单ID被修改，立即同步删除旧记录到云端
                 if (orderId !== originalId) {
+                    trackingHistory.forEach(t => {
+                        if (t.shipmentId === originalId || t.shipment_id === originalId || t.orderId === originalId || t.order_id === originalId) {
+                            t.shipmentId = orderId;
+                            t.shipment_id = orderId;
+                            t.orderId = orderId;
+                            t.order_id = orderId;
+                        }
+                    });
+                    saveData('trackingHistory', trackingHistory);
+                    try { localStorage.setItem('trackingHistory', JSON.stringify(trackingHistory)); } catch(e) {}
                     pushLocalDeletionsToCloud();
                 }
                 hideModal();
@@ -13777,7 +13795,7 @@ Content-Type: application/json</pre>
                 { text: '保存', class: 'btn-primary', onclick: `saveContainerOrder('${orderId}')` }
             ], true);
             
-            setTimeout(() => { loadOrderTrackingList('${orderId}', 'container'); initTrackingStatusToggle('container'); }, 100);
+            setTimeout(() => { loadOrderTrackingList(orderId, 'container'); initTrackingStatusToggle('container'); }, 100);
         }
 
         function deleteBusinessOrder(orderId) {
@@ -18840,7 +18858,7 @@ Content-Type: application/json</pre>
             document.getElementById('archive-count').textContent = filteredShipments.length;
         }
 
-        async function addTrackingEntry(orderId, orderType) {
+        function addTrackingEntry(orderId, orderType) {
             const statusEl = document.getElementById(`${orderType}-order-tracking-status`);
             const customStatusEl = document.getElementById(`${orderType}-order-tracking-custom-status`);
             const locationEl = document.getElementById(`${orderType}-order-tracking-location`);
@@ -18877,7 +18895,7 @@ Content-Type: application/json</pre>
             };
             
             trackingHistory.push(entry);
-            await saveData('trackingHistory', trackingHistory);
+            saveData('trackingHistory', trackingHistory);
             try { localStorage.setItem('trackingHistory', JSON.stringify(trackingHistory)); } catch(e) {}
             
             const order = orderType === 'business' 
@@ -18899,35 +18917,18 @@ Content-Type: application/json</pre>
             locationEl.value = '';
             descEl.value = '';
             
-            loadOrderTrackingList(orderId, orderType);
+            renderTrackingList(orderId, orderType);
             showNotification('轨迹已添加', 'success');
         }
         
-        async function loadOrderTrackingList(orderId, orderType) {
+        function renderTrackingList(orderId, orderType) {
             const listEl = document.getElementById(`${orderType}-order-tracking-list`);
             if (!listEl) return;
             
-            if (!trackingHistory || trackingHistory.length === 0) {
-                try {
-                    const saved = await dbGetItem('trackingHistory');
-                    if (saved && Array.isArray(saved) && saved.length > 0) {
-                        trackingHistory = saved;
-                    } else {
-                        const ls = localStorage.getItem('trackingHistory');
-                        if (ls) trackingHistory = JSON.parse(ls);
-                    }
-                } catch(e) {
-                    try {
-                        const ls = localStorage.getItem('trackingHistory');
-                        if (ls) trackingHistory = JSON.parse(ls);
-                    } catch(e2) {}
-                }
-            }
-            
-            const entries = trackingHistory.filter(t => 
-                t.shipmentId === orderId || t.shipment_id === orderId || 
-                t.orderId === orderId || t.order_id === orderId
-            ).sort((a, b) => new Date(b.createdAt || b.created_at) - new Date(a.createdAt || a.created_at));
+            const entries = trackingHistory.filter(t => {
+                const tid = t.shipmentId || t.shipment_id || t.orderId || t.order_id || '';
+                return tid === orderId;
+            }).sort((a, b) => new Date(b.createdAt || b.created_at) - new Date(a.createdAt || a.created_at));
             
             const statusMap = {
                 'ordered': '已下单', 'warehoused': '已入库', 'reviewed': '已审单', 'loaded': '已装柜',
@@ -18962,11 +18963,36 @@ Content-Type: application/json</pre>
             }).join('');
         }
         
+        async function loadOrderTrackingList(orderId, orderType) {
+            const listEl = document.getElementById(`${orderType}-order-tracking-list`);
+            if (!listEl) return;
+            
+            try {
+                const saved = await dbGetItem('trackingHistory');
+                if (saved && Array.isArray(saved) && saved.length > 0) {
+                    const localIds = new Set((trackingHistory || []).map(t => t.id));
+                    const newEntries = saved.filter(t => !localIds.has(t.id));
+                    if (newEntries.length > 0) {
+                        trackingHistory = [...(trackingHistory || []), ...newEntries];
+                    }
+                }
+            } catch(e) {}
+            
+            if (!trackingHistory || trackingHistory.length === 0) {
+                try {
+                    const ls = localStorage.getItem('trackingHistory');
+                    if (ls) trackingHistory = JSON.parse(ls);
+                } catch(e) {}
+            }
+            
+            renderTrackingList(orderId, orderType);
+        }
+        
         async function deleteTrackingEntry(entryId, orderId, orderType) {
             trackingHistory = trackingHistory.filter(t => t.id !== entryId);
-            await saveData('trackingHistory', trackingHistory);
+            saveData('trackingHistory', trackingHistory);
             try { localStorage.setItem('trackingHistory', JSON.stringify(trackingHistory)); } catch(e) {}
-            loadOrderTrackingList(orderId, orderType);
+            renderTrackingList(orderId, orderType);
             showNotification('轨迹已删除', 'success');
         }
 
@@ -18979,7 +19005,7 @@ Content-Type: application/json</pre>
             });
         }
 
-        async function updateShipmentStatus(shipmentId, newStatus) {
+        function updateShipmentStatus(shipmentId, newStatus) {
             const shipment = shipments.find(s => s.id === shipmentId);
             if (shipment) {
                 const oldStatus = shipment.status;
@@ -18999,8 +19025,8 @@ Content-Type: application/json</pre>
                 };
                 trackingHistory.push(trackingEntry);
                 
-                await saveData('shipments', shipments);
-                await saveData('trackingHistory', trackingHistory);
+                saveData('shipments', shipments);
+                saveData('trackingHistory', trackingHistory);
                 try { localStorage.setItem('trackingHistory', JSON.stringify(trackingHistory)); } catch(e) {}
                 
                 const statusText = { 'pending': '待处理', 'processing': '处理中', 'picked-up': '已揽收', 'shipped': '已发货', 'in-transit': '运输中', 'clearance': '清关中', 'out-for-delivery': '派送中', 'delivered': '已送达', 'returned': '已退回', 'exception': '异常' }[newStatus] || newStatus;
