@@ -9939,7 +9939,11 @@ Content-Type: application/json</pre>
         // 从云端软删除单条数据（设置deleted_at而不是真正删除）
         async function syncDeleteFromCloud(key, id) {
             if (!supabaseClient || !supabaseConnected) {
-                console.log('syncDeleteFromCloud: 未连接云端，跳过删除');
+                if (cloudflareConnected) {
+                    if (typeof cfNeedsSync === 'undefined' || !cfNeedsSync) {
+                        try { localStorage.setItem('cfNeedsSync', 'true'); } catch(e) {}
+                    }
+                }
                 enqueuePendingDelete(key, id);
                 return;
             }
@@ -12377,6 +12381,25 @@ Content-Type: application/json</pre>
             }
         }
 
+        function markCostManual(type) {
+            if (type === 'container') {
+                const costEl = document.getElementById('container-order-cost-price');
+                if (costEl) {
+                    costEl.dataset.manual = 'true';
+                }
+            }
+        }
+
+        function resetCostAuto(type) {
+            if (type === 'container') {
+                const costEl = document.getElementById('container-order-cost-price');
+                if (costEl) {
+                    costEl.dataset.manual = 'false';
+                }
+                recalcContainerOrderProfit(true);
+            }
+        }
+
         function recalcBusinessOrderProfit(force = false) {
             const costEl = document.getElementById('business-order-cost-price');
             const quoteEl = document.getElementById('business-order-quote-price');
@@ -12461,13 +12484,17 @@ Content-Type: application/json</pre>
             const deliveryFee = parseFloat(document.getElementById('container-order-delivery-fee')?.value) || 0;
             
             const totalCost = seaFreight + portFee + customsFee + trailerFee + clearanceFee + handlingFee + destinationFee + deliveryFee;
-            costEl.value = totalCost.toFixed(2);
+            const isCostManual = costEl.dataset.manual === 'true';
+            if (!isCostManual || force) {
+                costEl.value = totalCost.toFixed(2);
+            }
             
+            const finalCost = parseFloat(costEl.value) || 0;
             const isManual = profitEl.dataset.manual === 'true';
             if (isManual && !force) return;
             
             const quote = parseFloat(quoteEl.value) || 0;
-            const profit = quote - totalCost;
+            const profit = quote - finalCost;
             profitEl.value = profit.toFixed(2);
             profitEl.dataset.manual = 'false';
             recalcContainerOrderCompanyProfit();
@@ -13351,7 +13378,10 @@ Content-Type: application/json</pre>
                     </div>
                     <div>
                         <div class="input-label">成本价 (¥)</div>
-                        <input type="number" id="container-order-cost-price" class="input-field" min="0" step="0.01" oninput="recalcContainerOrderProfit()" placeholder="0.00" readonly style="background:var(--input-bg);">
+                        <div style="display:flex; gap:8px; align-items:center;">
+                            <input type="number" id="container-order-cost-price" class="input-field" min="0" step="0.01" oninput="markCostManual('container')" placeholder="0.00" data-manual="false">
+                            <button class="btn btn-sm btn-outline" onclick="resetCostAuto('container')">自动计算</button>
+                        </div>
                     </div>
                     <div>
                         <div class="input-label">报价 (¥)</div>
@@ -13440,6 +13470,7 @@ Content-Type: application/json</pre>
             const destinationFee = parseFloat(document.getElementById('container-order-destination-fee').value) || 0;
             const deliveryFee = parseFloat(document.getElementById('container-order-delivery-fee').value) || 0;
             const costPrice = parseFloat(document.getElementById('container-order-cost-price').value) || 0;
+            const costManual = document.getElementById('container-order-cost-price')?.dataset.manual === 'true';
             const quotePrice = parseFloat(document.getElementById('container-order-quote-price').value) || 0;
             const neutralFee = parseFloat(document.getElementById('container-order-neutral-fee')?.value) || 0;
             const profitInput = document.getElementById('container-order-profit');
@@ -13512,6 +13543,7 @@ Content-Type: application/json</pre>
                     destinationFee,
                     deliveryFee,
                     costPrice,
+                    costManual,
                     quotePrice,
                     neutralFee,
                     profit: profitValue,
@@ -13580,6 +13612,7 @@ Content-Type: application/json</pre>
                 destinationFee,
                 deliveryFee,
                 costPrice,
+                costManual,
                 quotePrice,
                 neutralFee,
                 profit: profitValue,
@@ -13704,7 +13737,10 @@ Content-Type: application/json</pre>
                     </div>
                     <div>
                         <div class="input-label">成本价 (¥)</div>
-                        <input type="number" id="container-order-cost-price" class="input-field" min="0" step="0.01" value="${order.costPrice || 0}" readonly style="background:var(--input-bg);">
+                        <div style="display:flex; gap:8px; align-items:center;">
+                            <input type="number" id="container-order-cost-price" class="input-field" min="0" step="0.01" value="${order.costPrice || 0}" oninput="markCostManual('container')" data-manual="${order.costManual ? 'true' : 'false'}">
+                            <button class="btn btn-sm btn-outline" onclick="resetCostAuto('container')">自动计算</button>
+                        </div>
                     </div>
                     <div>
                         <div class="input-label">报价 (¥)</div>
