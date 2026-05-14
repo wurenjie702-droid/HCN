@@ -5128,6 +5128,14 @@
                             </select>
                         </div>
                         <div style="display: flex; align-items: center; gap: 8px;">
+                            <label style="font-size: 13px; color: var(--gray-600);">工资结算:</label>
+                            <select id="business-order-filter-salary-status" class="input-field" style="width: 110px; padding: 6px 10px;" onchange="applyBusinessOrderFilters()">
+                                <option value="">全部</option>
+                                <option value="工资已结算">工资已结算</option>
+                                <option value="工资未结算">工资未结算</option>
+                            </select>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 8px;">
                             <label style="font-size: 13px; color: var(--gray-600);">开始日期:</label>
                             <input type="date" id="business-order-filter-start-date" class="input-field" style="width: 130px; padding: 6px 10px;" onchange="applyBusinessOrderFilters()">
                         </div>
@@ -5162,6 +5170,7 @@
                                     <th>运输方式</th>
                                     <th>下单日期</th>
                                     <th>状态</th>
+                                    <th>工资结算</th>
                                     <th>贴标</th>
                                     <th>贴标费</th>
                                     <th>杂费</th>
@@ -5174,7 +5183,7 @@
                             </thead>
                             <tbody>
                                 <tr>
-                                    <td colspan="20" style="text-align: center; padding: 20px; color: var(--gray-500);">
+                                    <td colspan="22" style="text-align: center; padding: 20px; color: var(--gray-500);">
                                         暂无订单
                                     </td>
                                 </tr>
@@ -12124,19 +12133,9 @@ Content-Type: application/json</pre>
                 }
             }
 
-            const newCustomer = {
-                id: generateUUID(),
-                name: rawName,
-                company: rawName,
-                createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString()
-            };
-            customers.push(newCustomer);
-            saveData('customers', customers);
-
             return {
-                customerId: newCustomer.id,
-                customerName: newCustomer.company || newCustomer.name || rawName
+                customerId: rawId || '',
+                customerName: rawName
             };
         }
 
@@ -12797,6 +12796,13 @@ Content-Type: application/json</pre>
                         </div>
                     </div>
                     <div>
+                        <div class="input-label">工资结算状态</div>
+                        <select id="business-order-salary-status" class="input-field">
+                            <option value="工资未结算">工资未结算</option>
+                            <option value="工资已结算">工资已结算</option>
+                        </select>
+                    </div>
+                    <div>
                         <div class="input-label">贴标</div>
                         <select id="business-order-label-required" class="input-field">
                             <option value="需要">需要</option>
@@ -12928,6 +12934,7 @@ Content-Type: application/json</pre>
             const origin = document.getElementById('business-order-origin')?.value?.trim() || '';
             const destination = document.getElementById('business-order-destination')?.value?.trim() || '';
             const trackingNumber = document.getElementById('business-order-tracking-number')?.value?.trim() || '';
+            const salaryStatus = document.getElementById('business-order-salary-status')?.value || '工资未结算';
 
             if (!customerId || !customerName || !supplier || !goodsInfo || !Number.isFinite(pieces) || pieces <= 0) {
                 showNotification('请完整填写贴标订单必填信息', 'warning');
@@ -12998,6 +13005,7 @@ Content-Type: application/json</pre>
                     origin,
                     destination,
                     trackingNumber,
+                    salaryStatus,
                     options,
                     updatedAt: new Date().toISOString()
                 };
@@ -13064,6 +13072,7 @@ Content-Type: application/json</pre>
                 origin,
                 destination,
                 trackingNumber,
+                salaryStatus,
                 options,
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString()
@@ -13163,6 +13172,13 @@ Content-Type: application/json</pre>
                         <div class="input-label">状态</div>
                         <select id="business-order-status" class="input-field">
                             ${statusOpts.map(opt => `<option value="${escapeHtml(opt)}" ${order.status === opt ? 'selected' : ''}>${escapeHtml(opt)}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div>
+                        <div class="input-label">工资结算状态</div>
+                        <select id="business-order-salary-status" class="input-field">
+                            <option value="工资未结算" ${(!order.salaryStatus || order.salaryStatus === '工资未结算') ? 'selected' : ''}>工资未结算</option>
+                            <option value="工资已结算" ${order.salaryStatus === '工资已结算' ? 'selected' : ''}>工资已结算</option>
                         </select>
                     </div>
                     <div>
@@ -14046,7 +14062,7 @@ Content-Type: application/json</pre>
                     : (hasFilters ? '未找到匹配的订单' : '暂无订单');
                 tableBody.innerHTML = `
                     <tr>
-                        <td colspan="20" style="text-align: center; padding: 20px; color: var(--gray-500);">
+                        <td colspan="22" style="text-align: center; padding: 20px; color: var(--gray-500);">
                             ${emptyText}
                         </td>
                     </tr>
@@ -14066,6 +14082,8 @@ Content-Type: application/json</pre>
                 const profitColor = profit >= 0 ? 'var(--success)' : 'var(--danger)';
                 const orderDate = escapeHtml(order.orderDate || (order.createdAt ? new Date(order.createdAt).toISOString().slice(0, 10) : '-'));
                 const customerDisplay = getCustomerDisplayName(order.customerId, order.customerName);
+                const salaryStatus = order.salaryStatus || '工资未结算';
+                const salaryColor = salaryStatus === '工资已结算' ? 'var(--success)' : 'var(--warning)';
                 return `
                     <tr>
                         <td><input type="checkbox" class="business-order-checkbox" value="${order.id}" onchange="updateSelectedBusinessOrders(this)"></td>
@@ -14080,6 +14098,7 @@ Content-Type: application/json</pre>
                         <td>${escapeHtml(formatTransportMethod(order.transportMethod))}</td>
                         <td>${orderDate}</td>
                         <td><span style="color:${statusMeta.color}; font-weight:600;">${statusMeta.text}</span></td>
+                        <td><span style="color:${salaryColor}; font-weight:600; font-size:12px;">${salaryStatus}</span></td>
                         <td>${escapeHtml(order.labelRequired || '不需要')}</td>
                         <td class="num-cell">${formatCurrency(order.labelFee || 0)}</td>
                         <td class="num-cell">${formatCurrency(order.miscFee || 0)}</td>
@@ -14320,7 +14339,7 @@ Content-Type: application/json</pre>
         }
         
         function exportOrdersToCSV(orders, filename) {
-            const headers = ['订单ID', '客户ID', '客户名称', '业务员', '供应商', '货物信息', '件数', '供应商计费重', '供应商计费重单位', '客户计费重', '客户计费重单位', '运输方式', '下单日期', '状态', '贴标', '贴标费', '杂费', '成本价', '报价', '利润', '客服提成', '业务提成', '业务提成2', '公司利润', '备注'];
+            const headers = ['订单ID', '客户ID', '客户名称', '业务员', '供应商', '货物信息', '件数', '供应商计费重', '供应商计费重单位', '客户计费重', '客户计费重单位', '运输方式', '下单日期', '状态', '工资结算状态', '贴标', '贴标费', '杂费', '成本价', '报价', '利润', '客服提成', '业务提成', '业务提成2', '公司利润', '备注'];
             const data = orders.map(order => {
                 const normalized = normalizeBusinessOrderRecord(order);
                 return [
@@ -14338,6 +14357,7 @@ Content-Type: application/json</pre>
                     normalized.transportMethod || '',
                     normalized.orderDate || '',
                     normalized.status || '',
+                    normalized.salaryStatus || '工资未结算',
                     normalized.labelRequired || '不需要',
                     normalized.labelFee || 0,
                     normalized.miscFee || 0,
@@ -14365,6 +14385,7 @@ Content-Type: application/json</pre>
             return {
                 keyword: document.getElementById('business-order-filter-keyword')?.value?.toLowerCase() || '',
                 status: document.getElementById('business-order-filter-status')?.value || '',
+                salaryStatus: document.getElementById('business-order-filter-salary-status')?.value || '',
                 startDate: document.getElementById('business-order-filter-start-date')?.value || '',
                 endDate: document.getElementById('business-order-filter-end-date')?.value || ''
             };
@@ -14388,6 +14409,7 @@ Content-Type: application/json</pre>
                     if (!searchFields.some(f => f.includes(filters.keyword))) return false;
                 }
                 if (filters.status && order.status !== filters.status) return false;
+                if (filters.salaryStatus && (order.salaryStatus || '工资未结算') !== filters.salaryStatus) return false;
                 if (filters.startDate) {
                     const orderDate = order.orderDate || (order.createdAt ? order.createdAt.slice(0, 10) : '');
                     if (orderDate < filters.startDate) return false;
@@ -14401,7 +14423,7 @@ Content-Type: application/json</pre>
         }
         
         function isBusinessOrderFilterActive(filters) {
-            return !!(filters.keyword || filters.status || filters.startDate || filters.endDate);
+            return !!(filters.keyword || filters.status || filters.salaryStatus || filters.startDate || filters.endDate);
         }
         
         function applyBusinessOrderFilters() {
@@ -14411,10 +14433,12 @@ Content-Type: application/json</pre>
         function resetBusinessOrderFilters() {
             const keywordInput = document.getElementById('business-order-filter-keyword');
             const statusSelect = document.getElementById('business-order-filter-status');
+            const salaryStatusSelect = document.getElementById('business-order-filter-salary-status');
             const startDateInput = document.getElementById('business-order-filter-start-date');
             const endDateInput = document.getElementById('business-order-filter-end-date');
             if (keywordInput) keywordInput.value = '';
             if (statusSelect) statusSelect.value = '';
+            if (salaryStatusSelect) salaryStatusSelect.value = '';
             if (startDateInput) startDateInput.value = '';
             if (endDateInput) endDateInput.value = '';
             loadBusinessOrders();
@@ -15954,6 +15978,7 @@ Content-Type: application/json</pre>
                 saveData('warehouseEntries', warehouseEntries);
                 saveData('deletedWarehouseEntries', deletedWarehouseEntries);
                 try { localStorage.setItem('warehouseEntries', JSON.stringify(warehouseEntries)); } catch(e) {}
+                try { localStorage.setItem('deletedWarehouseEntries', JSON.stringify(deletedWarehouseEntries)); } catch(e) {}
                 
                 syncDeleteFromCloud('warehouseEntries', entryId);
                 if (cloudflareConnected) localStorage.setItem('cfNeedsSync', 'true');
@@ -16667,6 +16692,7 @@ Content-Type: application/json</pre>
                 saveData('outboundEntries', outboundEntries);
                 saveData('deletedOutboundEntries', deletedOutboundEntries);
                 try { localStorage.setItem('outboundEntries', JSON.stringify(outboundEntries)); } catch(e) {}
+                try { localStorage.setItem('deletedOutboundEntries', JSON.stringify(deletedOutboundEntries)); } catch(e) {}
                 
                 syncDeleteFromCloud('outboundEntries', entryId);
                 if (cloudflareConnected) localStorage.setItem('cfNeedsSync', 'true');
@@ -16769,7 +16795,6 @@ Content-Type: application/json</pre>
             if(!message) return;
 
             const container = document.getElementById('neutral-ai-messages');
-            // 添加用户消息
             const userMsg = document.createElement('div');
             userMsg.className = 'ai-message user';
             userMsg.innerText = message;
@@ -16778,19 +16803,86 @@ Content-Type: application/json</pre>
             input.value = '';
             container.scrollTop = container.scrollHeight;
 
-            // 1. 尝试调用真实API
+            const trackingResult = await tryLookupTrackingNumber(message);
+            if (trackingResult) {
+                setTimeout(() => {
+                    const reply = document.createElement('div');
+                    reply.className = 'ai-message assistant';
+                    reply.innerHTML = trackingResult;
+                    container.appendChild(reply);
+                    container.scrollTop = container.scrollHeight;
+                }, 300);
+                return;
+            }
+
             const aiReplyText = await callExternalAIAPI(message);
-            
-            // 2. 生成回复（真实API或本地模拟）
             const replyText = aiReplyText || getTemplateResponseEnhanced(message);
 
             setTimeout(() => {
                 const reply = document.createElement('div');
                 reply.className = 'ai-message assistant';
-                reply.innerHTML = replyText; // 使用innerHTML以支持返回的HTML格式
+                reply.innerHTML = replyText;
                 container.appendChild(reply);
                 container.scrollTop = container.scrollHeight;
-            }, 500); // 稍微延迟模拟网络感
+            }, 500);
+        }
+
+        async function tryLookupTrackingNumber(message) {
+            const trimmed = message.trim();
+            const isPossibleTrackingNumber = /^[A-Za-z0-9\-_]{4,}$/.test(trimmed);
+
+            if (!isPossibleTrackingNumber) return null;
+
+            const keyword = trimmed.toLowerCase();
+            let results = [];
+
+            const allOrders = [
+                ...businessOrders.map(o => ({...o, _type: '贴标订单'})),
+                ...containerOrders.map(o => ({...o, _type: '整柜订单'})),
+                ...shipments.map(o => ({...o, _type: '运单'}))
+            ];
+
+            allOrders.forEach(order => {
+                const id = (order.id || '').toLowerCase();
+                const trackingNumber = (order.trackingNumber || order.tracking_number || '').toLowerCase();
+                const orderNo = (order.orderNo || order.order_number || '').toLowerCase();
+                if (id.includes(keyword) || trackingNumber.includes(keyword) || orderNo.includes(keyword)) {
+                    results.push(order);
+                }
+            });
+
+            if (results.length === 0) return null;
+
+            const STATUS_LABELS = {
+                'ordered': '已下单', 'warehoused': '已入库', 'reviewed': '已审单',
+                'loaded': '已装柜', 'sailed': '已开船', 'arrived': '已到港',
+                'cleared': '已清关', 'completed': '已完结', 'pending': '待处理',
+                'processing': '处理中', 'shipped': '已发货', 'in-transit': '运输中',
+                'delivered': '已送达', 'exception': '异常',
+                '待处理': '待处理', '处理中': '处理中', '已完成': '已完成', '已取消': '已取消'
+            };
+
+            const display = results.slice(0, 5).map(order => {
+                const status = STATUS_LABELS[order.status] || order.status || '未知';
+                const origin = order.origin || '-';
+                const dest = order.destination || '-';
+                const tracking = order.trackingNumber || order.tracking_number || '-';
+                const type = order._type;
+                return `<div style="background:var(--input-bg);padding:10px;border-radius:8px;margin-bottom:6px;font-size:12px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;">
+                        <strong>${order.id}</strong>
+                        <span style="font-size:11px;color:var(--primary);">${type}</span>
+                    </div>
+                    <div style="margin-top:4px;color:var(--gray-600);">
+                        ${origin} → ${dest} | 状态: <strong>${status}</strong>
+                    </div>
+                    ${tracking !== '-' ? `<div style="margin-top:2px;color:var(--gray-600);">转单号: ${tracking}</div>` : ''}
+                </div>`;
+            }).join('');
+
+            const moreInfo = results.length > 5 ? `<div style="font-size:11px;color:var(--gray-500);">还有 ${results.length - 5} 条匹配结果...</div>` : '';
+
+            return `<div style="margin-bottom:8px;">🔍 查询到 <strong>${results.length}</strong> 条匹配记录：</div>${display}${moreInfo}`;
         }
 
         // 需求: 扩充AI回答内容库
@@ -16832,10 +16924,8 @@ Content-Type: application/json</pre>
                 return "由于运价受燃油附加费、季节性波动影响，具体报价请联系客服。<br>您可以提供：<br>1. 起运地和目的地城市<br>2. 货物尺寸和重量<br>3. 是否需要上门提货<br>客服热线：19098018917";
             }
 
-            // 查单逻辑
-            if (lowerMsg.length > 5 && !lowerMsg.includes(' ')) {
-                // 简单模拟查单，引导去首页
-                return `我已记录您的单号 "${message}"。<br>请前往首页的<strong>物流查询</strong>模块输入单号以获取最新轨迹。`;
+            if (/^[a-z0-9\-_]{4,}$/.test(lowerMsg) && !lowerMsg.includes(' ')) {
+                return `未在系统中找到单号 "<strong>${message}</strong>" 的匹配记录。<br><br>💡 请检查：<br>1. 单号是否输入正确<br>2. 该订单是否已录入系统<br>3. 尝试输入完整单号（如HCN开头）<br><br>如需帮助，请联系客服：19098018917`;
             }
 
             // 默认回复
@@ -21230,6 +21320,13 @@ Content-Type: application/json</pre>
                             </select>
                             <button class="btn btn-sm btn-outline" onclick="showCustomOptionsManager('status', 'business')"><i class="fas fa-cog"></i></button>
                         </div>
+                    </div>
+                    <div>
+                        <div class="input-label">工资结算状态</div>
+                        <select id="business-order-salary-status" class="input-field">
+                            <option value="工资未结算">工资未结算</option>
+                            <option value="工资已结算">工资已结算</option>
+                        </select>
                     </div>
                     <div>
                         <div class="input-label">贴标</div>
