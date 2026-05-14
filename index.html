@@ -5207,6 +5207,14 @@
                             </select>
                         </div>
                         <div style="display: flex; align-items: center; gap: 8px;">
+                            <label style="font-size: 13px; color: var(--gray-600);">工资结算:</label>
+                            <select id="container-order-filter-salary-status" class="input-field" style="width: 110px; padding: 6px 10px;" onchange="applyContainerOrderFilters()">
+                                <option value="">全部</option>
+                                <option value="工资已结算">工资已结算</option>
+                                <option value="工资未结算">工资未结算</option>
+                            </select>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 8px;">
                             <label style="font-size: 13px; color: var(--gray-600);">开始日期:</label>
                             <input type="date" id="container-order-filter-start-date" class="input-field" style="width: 130px; padding: 6px 10px;" onchange="applyContainerOrderFilters()">
                         </div>
@@ -5240,6 +5248,7 @@
                                     <th>柜型</th>
                                     <th>下单日期</th>
                                     <th>状态</th>
+                                    <th>工资结算</th>
                                     <th>海运费</th>
                                     <th>国内港杂费</th>
                                     <th>报关费</th>
@@ -12184,6 +12193,7 @@ Content-Type: application/json</pre>
                 origin: order.origin || '',
                 destination: order.destination || '',
                 trackingNumber: order.trackingNumber || order.tracking_number || '',
+                salaryStatus: order.salaryStatus || order.salary_status || '工资未结算',
                 options: normalizeOrderOptions(parseOrderOptionsValue(order.options || order.order_options)),
                 createdAt: order.createdAt || order.created_at || new Date().toISOString(),
                 updatedAt: order.updatedAt || order.updated_at || order.createdAt || order.created_at || new Date().toISOString()
@@ -12301,6 +12311,7 @@ Content-Type: application/json</pre>
                 origin: normalized.origin || '',
                 destination: normalized.destination || '',
                 tracking_number: normalized.trackingNumber || '',
+                salary_status: normalized.salaryStatus || '工资未结算',
                 options: JSON.stringify(normalized.options || []),
                 created_at: normalized.createdAt || new Date().toISOString(),
                 updated_at: normalized.updatedAt || new Date().toISOString(),
@@ -13345,6 +13356,13 @@ Content-Type: application/json</pre>
                         </div>
                     </div>
                     <div>
+                        <div class="input-label">工资结算状态</div>
+                        <select id="container-order-salary-status" class="input-field">
+                            <option value="工资未结算">工资未结算</option>
+                            <option value="工资已结算">工资已结算</option>
+                        </select>
+                    </div>
+                    <div>
                         <div class="input-label">起运地</div>
                         <input type="text" id="container-order-origin" class="input-field" placeholder="请输入起运地">
                     </div>
@@ -13499,6 +13517,7 @@ Content-Type: application/json</pre>
             const origin = document.getElementById('container-order-origin')?.value?.trim() || '';
             const destination = document.getElementById('container-order-destination')?.value?.trim() || '';
             const trackingNumber = document.getElementById('container-order-tracking-number')?.value?.trim() || '';
+            const salaryStatus = document.getElementById('container-order-salary-status')?.value || '工资未结算';
 
             if (!customerId || !customerName || !goodsInfo || !Number.isFinite(pieces) || pieces <= 0) {
                 showNotification('请完整填写整柜订单必填信息', 'warning');
@@ -13571,6 +13590,7 @@ Content-Type: application/json</pre>
                     origin,
                     destination,
                     trackingNumber,
+                    salaryStatus,
                     updatedAt: new Date().toISOString()
                 };
                 
@@ -13640,6 +13660,7 @@ Content-Type: application/json</pre>
                 origin,
                 destination,
                 trackingNumber,
+                salaryStatus,
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString()
             };
@@ -13713,6 +13734,13 @@ Content-Type: application/json</pre>
                         <div class="input-label">状态</div>
                         <select id="container-order-status" class="input-field">
                             ${statusOpts.map(opt => `<option value="${escapeHtml(opt)}" ${order.status === opt ? 'selected' : ''}>${escapeHtml(opt)}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div>
+                        <div class="input-label">工资结算状态</div>
+                        <select id="container-order-salary-status" class="input-field">
+                            <option value="工资未结算" ${(!order.salaryStatus || order.salaryStatus === '工资未结算') ? 'selected' : ''}>工资未结算</option>
+                            <option value="工资已结算" ${order.salaryStatus === '工资已结算' ? 'selected' : ''}>工资已结算</option>
                         </select>
                     </div>
                     <div>
@@ -14406,7 +14434,7 @@ Content-Type: application/json</pre>
                     : (hasFilters ? '未找到匹配的订单' : '暂无整柜订单');
                 tableBody.innerHTML = `
                     <tr>
-                        <td colspan="24" style="text-align: center; padding: 20px; color: var(--gray-500);">
+                        <td colspan="25" style="text-align: center; padding: 20px; color: var(--gray-500);">
                             ${emptyText}
                         </td>
                     </tr>
@@ -14438,6 +14466,7 @@ Content-Type: application/json</pre>
                         <td>${escapeHtml(order.containerType || '-')}</td>
                         <td>${orderDate}</td>
                         <td><span style="color:${statusMeta.color}; font-weight:600;">${statusMeta.text}</span></td>
+                        <td><span style="color:${(order.salaryStatus || '工资未结算') === '工资已结算' ? 'var(--success)' : 'var(--warning)'}; font-weight:600; font-size:12px;">${order.salaryStatus || '工资未结算'}</span></td>
                         <td class="num-cell">${formatCurrency(order.seaFreight || 0)}</td>
                         <td class="num-cell">${formatCurrency(order.portFee || 0)}</td>
                         <td class="num-cell">${formatCurrency(order.customsFee || 0)}</td>
@@ -14517,7 +14546,7 @@ Content-Type: application/json</pre>
         }
         
         function exportContainerOrdersToCSV(orders, filename) {
-            const headers = ['订单ID', '客户ID', '客户名称', '业务员', '货物信息', '件数', '供应商计费重', '供应商计费重单位', '客户计费重', '客户计费重单位', '柜型', '下单日期', '状态', '海运费', '国内港杂费', '报关费', '拖车费', '清关费', '操作手续费', '目的港费用', '尾端派送费', '成本价', '报价', '利润', '客服提成', '业务提成', '业务提成2', '公司利润', '备注'];
+            const headers = ['订单ID', '客户ID', '客户名称', '业务员', '货物信息', '件数', '供应商计费重', '供应商计费重单位', '客户计费重', '客户计费重单位', '柜型', '下单日期', '状态', '工资结算状态', '海运费', '国内港杂费', '报关费', '拖车费', '清关费', '操作手续费', '目的港费用', '尾端派送费', '成本价', '报价', '利润', '客服提成', '业务提成', '业务提成2', '公司利润', '备注'];
             const data = orders.map(order => {
                 const normalized = normalizeContainerOrderRecord(order);
                 return [
@@ -14534,6 +14563,7 @@ Content-Type: application/json</pre>
                     normalized.containerType || '',
                     normalized.orderDate || '',
                     normalized.status || '',
+                    normalized.salaryStatus || '工资未结算',
                     normalized.seaFreight || 0,
                     normalized.portFee || 0,
                     normalized.customsFee || 0,
@@ -14566,6 +14596,7 @@ Content-Type: application/json</pre>
             return {
                 keyword: document.getElementById('container-order-filter-keyword')?.value?.toLowerCase() || '',
                 status: document.getElementById('container-order-filter-status')?.value || '',
+                salaryStatus: document.getElementById('container-order-filter-salary-status')?.value || '',
                 startDate: document.getElementById('container-order-filter-start-date')?.value || '',
                 endDate: document.getElementById('container-order-filter-end-date')?.value || ''
             };
@@ -14583,11 +14614,13 @@ Content-Type: application/json</pre>
                         customerDisplay,
                         order.salesperson,
                         order.goodsInfo,
-                        order.notes
+                        order.notes,
+                        order.salaryStatus
                     ].map(f => (f || '').toLowerCase());
                     if (!searchFields.some(f => f.includes(filters.keyword))) return false;
                 }
                 if (filters.status && order.status !== filters.status) return false;
+                if (filters.salaryStatus && (order.salaryStatus || '工资未结算') !== filters.salaryStatus) return false;
                 if (filters.startDate) {
                     const orderDate = order.orderDate || (order.createdAt ? order.createdAt.slice(0, 10) : '');
                     if (orderDate < filters.startDate) return false;
@@ -14601,7 +14634,7 @@ Content-Type: application/json</pre>
         }
         
         function isContainerOrderFilterActive(filters) {
-            return !!(filters.keyword || filters.status || filters.startDate || filters.endDate);
+            return !!(filters.keyword || filters.status || filters.salaryStatus || filters.startDate || filters.endDate);
         }
         
         function applyContainerOrderFilters() {
@@ -14611,10 +14644,12 @@ Content-Type: application/json</pre>
         function resetContainerOrderFilters() {
             const keywordInput = document.getElementById('container-order-filter-keyword');
             const statusSelect = document.getElementById('container-order-filter-status');
+            const salaryStatusSelect = document.getElementById('container-order-filter-salary-status');
             const startDateInput = document.getElementById('container-order-filter-start-date');
             const endDateInput = document.getElementById('container-order-filter-end-date');
             if (keywordInput) keywordInput.value = '';
             if (statusSelect) statusSelect.value = '';
+            if (salaryStatusSelect) salaryStatusSelect.value = '';
             if (startDateInput) startDateInput.value = '';
             if (endDateInput) endDateInput.value = '';
             loadContainerOrders();
@@ -21338,6 +21373,13 @@ Content-Type: application/json</pre>
                             </select>
                             <button class="btn btn-sm btn-outline" onclick="showCustomOptionsManager('status', 'container')"><i class="fas fa-cog"></i></button>
                         </div>
+                    </div>
+                    <div>
+                        <div class="input-label">工资结算状态</div>
+                        <select id="container-order-salary-status" class="input-field">
+                            <option value="工资未结算">工资未结算</option>
+                            <option value="工资已结算">工资已结算</option>
+                        </select>
                     </div>
                     <div>
                         <div class="input-label">起运地</div>
