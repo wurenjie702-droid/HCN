@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>智能物流管理系统 Ultra V30.0 (Enterprise Edition)</title>
+    <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <!-- 引入 Font Awesome 图标库 -->
@@ -6418,13 +6419,25 @@ Content-Type: application/json</pre>
                         <div class="input-group">
                             <div class="input-label">AI 模型端点 (URL)</div>
                             <input type="text" class="input-field" id="ai-api-endpoint" placeholder="例如: https://api.deepseek.com/v1/chat/completions">
-                            <div class="input-hint">如需使用真实AI（如DeepSeek），请填写API端点。若留空则使用本地模拟回复。</div>
+                            <div class="input-hint">如需使用真实AI，请填写API端点。若留空则使用本地模拟回复。<br>千问: https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions<br>DeepSeek: https://api.deepseek.com/v1/chat/completions</div>
                         </div>
 
                         <div class="input-group">
                             <div class="input-label">AI API 密钥</div>
                             <input type="password" class="input-field" id="ai-api-key" placeholder="输入 API Key (sk-...)">
                             <div class="input-hint">密钥将保存在本地浏览器中，不会上传。</div>
+                        </div>
+
+                        <div class="input-group">
+                            <div class="input-label">AI 模型名称</div>
+                            <select class="input-field" id="ai-model">
+                                <option value="deepseek-chat">DeepSeek Chat</option>
+                                <option value="qwen-turbo">千问 Turbo (快速)</option>
+                                <option value="qwen-plus">千问 Plus (均衡)</option>
+                                <option value="qwen-max">千问 Max (最强)</option>
+                                <option value="qwen-long">千问 Long (长文本)</option>
+                            </select>
+                            <div class="input-hint">选择AI模型。千问模型需配合千问API端点使用。</div>
                         </div>
 
                         <div class="input-group">
@@ -10625,8 +10638,9 @@ Content-Type: application/json</pre>
             weightUnit: 'kg',
             volumetricFactor: 5000,
             deepseekApiKey: '', // 保留兼容性
-            aiApiEndpoint: 'https://api.deepseek.com/v1/chat/completions', // 新增：默认AI端点
-            aiApiKey: '', // 新增：通用AI Key
+            aiApiEndpoint: 'https://api.deepseek.com/v1/chat/completions',
+            aiApiKey: '',
+            aiModel: 'deepseek-chat',
             syncInterval: 120, // 云同步自动拉取间隔（秒），0表示关闭
             cloudSyncEnabled: true,
             trackingApi: '17track',
@@ -16757,6 +16771,27 @@ Content-Type: application/json</pre>
 
             try {
                 showNotification('AI正在思考...', 'info');
+
+                const businessContext = buildAIBusinessContext();
+
+                const systemPrompt = `你是HCN物流公司的智能客服助手。请简洁、专业地回答问题。
+
+关于我们公司：
+- 公司名称：HCN物流
+- 主营业务：国际海运整柜/拼箱、空运、贴标服务、仓储管理
+- 服务区域：东南亚、欧洲、美洲、中东、日本等全球航线
+- 客服热线：19098018917
+
+${businessContext}
+
+回答规则：
+1. 如果用户输入的是单号（字母数字组合），告诉他们可以直接输入单号查询
+2. 关于具体运价，引导联系客服获取报价
+3. 回答要简洁实用，不要过长
+4. 如果不确定，建议联系人工客服`;
+
+                const aiModel = settings.aiModel || 'deepseek-chat';
+
                 const response = await fetch(endpoint, {
                     method: 'POST',
                     headers: {
@@ -16764,9 +16799,9 @@ Content-Type: application/json</pre>
                         'Authorization': `Bearer ${apiKey}`
                     },
                     body: JSON.stringify({
-                        model: "deepseek-chat", // 假设是DeepSeek或其他兼容模型
+                        model: aiModel,
                         messages: [
-                            {role: "system", content: "你是一个专业的物流客服助手，名为HCN。请简洁、专业地回答问题。"},
+                            {role: "system", content: systemPrompt},
                             {role: "user", content: message}
                         ]
                     })
@@ -16787,6 +16822,40 @@ Content-Type: application/json</pre>
                 showNotification('AI连接失败，已切换至本地回复', 'warning');
                 return null;
             }
+        }
+
+        function buildAIBusinessContext() {
+            const totalBusiness = businessOrders.filter(o => !o.deleted_at).length;
+            const totalContainer = containerOrders.filter(o => !o.deleted_at).length;
+            const totalShipments = shipments.length;
+            const totalCustomers = customers.length;
+
+            const recentOrders = businessOrders
+                .filter(o => !o.deleted_at && o.orderDate)
+                .sort((a, b) => new Date(b.orderDate) - new Date(a.orderDate))
+                .slice(0, 5)
+                .map(o => `单号${o.id}: ${o.origin || '未知'}→${o.destination || '未知'}, 状态${o.status || '未知'}, 客户${o.customerName || '未知'}`)
+                .join('; ');
+
+            const transportMethods = [...new Set([
+                ...businessOrders.map(o => o.transportMethod).filter(Boolean),
+                ...containerOrders.map(o => o.transportMethod).filter(Boolean),
+                ...shipments.map(o => o.transportMethod).filter(Boolean)
+            ])];
+
+            const routes = [...new Set([
+                ...businessOrders.map(o => `${o.origin || ''}→${o.destination || ''}`).filter(r => r !== '→'),
+                ...containerOrders.map(o => `${o.origin || ''}→${o.destination || ''}`).filter(r => r !== '→')
+            ])].slice(0, 20);
+
+            return `当前系统数据概览：
+- 贴标订单: ${totalBusiness}条
+- 整柜订单: ${totalContainer}条
+- 运单: ${totalShipments}条
+- 客户: ${totalCustomers}位
+- 运输方式: ${transportMethods.join(', ') || '暂无'}
+- 活跃航线: ${routes.join(', ') || '暂无'}
+- 最近订单: ${recentOrders || '暂无'}`;
         }
 
         async function sendNeutralAIMessage() {
@@ -16837,50 +16906,115 @@ Content-Type: application/json</pre>
             let results = [];
 
             const allOrders = [
-                ...businessOrders.map(o => ({...o, _type: '贴标订单'})),
-                ...containerOrders.map(o => ({...o, _type: '整柜订单'})),
-                ...shipments.map(o => ({...o, _type: '运单'}))
+                ...businessOrders.map(o => ({...o, _type: '贴标订单', _resultType: 'businessOrder'})),
+                ...containerOrders.map(o => ({...o, _type: '整柜订单', _resultType: 'containerOrder'})),
+                ...shipments.map(o => ({...o, _type: '运单', _resultType: 'shipment'}))
             ];
 
             allOrders.forEach(order => {
                 const id = (order.id || '').toLowerCase();
                 const trackingNumber = (order.trackingNumber || order.tracking_number || '').toLowerCase();
                 const orderNo = (order.orderNo || order.order_number || '').toLowerCase();
-                if (id.includes(keyword) || trackingNumber.includes(keyword) || orderNo.includes(keyword)) {
+                const customerName = (order.customerName || '').toLowerCase();
+                if (id.includes(keyword) || trackingNumber.includes(keyword) || orderNo.includes(keyword) || customerName.includes(keyword)) {
                     results.push(order);
                 }
             });
 
             if (results.length === 0) return null;
 
-            const STATUS_LABELS = {
+            const STATUS_MAP = {
                 'ordered': '已下单', 'warehoused': '已入库', 'reviewed': '已审单',
                 'loaded': '已装柜', 'sailed': '已开船', 'arrived': '已到港',
                 'cleared': '已清关', 'completed': '已完结', 'pending': '待处理',
-                'processing': '处理中', 'shipped': '已发货', 'in-transit': '运输中',
-                'delivered': '已送达', 'exception': '异常',
+                'processing': '处理中', 'picked-up': '已揽收', 'shipped': '已发货',
+                'in-transit': '运输中', 'clearance': '清关中', 'out-for-delivery': '派送中',
+                'delivered': '已送达', 'returned': '已退回', 'exception': '异常',
                 '待处理': '待处理', '处理中': '处理中', '已完成': '已完成', '已取消': '已取消'
             };
 
             const display = results.slice(0, 5).map(order => {
-                const status = STATUS_LABELS[order.status] || order.status || '未知';
+                const status = STATUS_MAP[order.status] || order.status || '未知';
                 const origin = order.origin || '-';
                 const dest = order.destination || '-';
-                const tracking = order.trackingNumber || order.tracking_number || '-';
+                const tracking = order.trackingNumber || order.tracking_number || '';
                 const type = order._type;
-                return `<div style="background:var(--input-bg);padding:10px;border-radius:8px;margin-bottom:6px;font-size:12px;">
+                const typeColor = order._resultType === 'containerOrder' ? 'var(--warning)' : 'var(--primary)';
+                const orderDate = order.orderDate || (order.createdAt ? new Date(order.createdAt).toLocaleDateString() : '-');
+                const customerName = order.customerName || getCustomerDisplayName(order.customerId, '') || '-';
+                const salesperson = order.salesperson || '-';
+                const goodsInfo = order.goodsInfo || order.description || '-';
+                const pieces = order.pieces || order.totalQuantity || 0;
+                const transportMethod = order.transportMethod || '-';
+
+                let weightInfo = '';
+                if (order._resultType === 'shipment') {
+                    const totalChargeable = order.totalChargeable || 0;
+                    weightInfo = `<span style="margin-right:10px;"><i class="fas fa-weight-hanging"></i> ${Number(totalChargeable).toFixed(2)}kg</span>`;
+                } else if (order._resultType === 'containerOrder') {
+                    const containerType = order.containerType || '';
+                    weightInfo = containerType ? `<span style="margin-right:10px;"><i class="fas fa-cube"></i> ${containerType}</span>` : '';
+                } else {
+                    const weightUnit = order.customerWeightUnit || 'kg';
+                    const customerChargeWeight = order.customerChargeWeight || 0;
+                    weightInfo = `<span style="margin-right:10px;"><i class="fas fa-weight-hanging"></i> ${Number(customerChargeWeight).toFixed(2)}${weightUnit}</span>`;
+                }
+
+
+
+                const orderTracking = trackingHistory.filter(t =>
+                    t.shipmentId === order.id || t.shipment_id === order.id ||
+                    t.orderId === order.id || t.order_id === order.id
+                ).sort((a, b) => new Date(b.createdAt || b.created_at) - new Date(a.createdAt || a.created_at));
+
+                let trackingTimelineHtml = '';
+                if (orderTracking.length > 0) {
+                    const latest3 = orderTracking.slice(0, 3);
+                    trackingTimelineHtml = `<div style="margin-top:8px;padding-top:8px;border-top:1px dashed var(--border);">
+                        <div style="font-size:11px;color:var(--gray-500);margin-bottom:4px;">物流轨迹（最近${latest3.length}条）：</div>
+                        ${latest3.map((track, idx) => {
+                            const trackStatus = STATUS_MAP[track.status] || track.status || '状态更新';
+                            const trackTime = new Date(track.createdAt || track.created_at || track.time).toLocaleString();
+                            const isLatest = idx === 0;
+                            return `<div style="display:flex;gap:6px;margin-bottom:4px;align-items:flex-start;">
+                                <div style="width:6px;height:6px;border-radius:50%;background:${isLatest ? 'var(--primary)' : 'var(--gray-400)'};margin-top:5px;flex-shrink:0;"></div>
+                                <div style="font-size:11px;"><strong style="color:${isLatest ? 'var(--primary)' : 'var(--text)'};">${trackStatus}</strong> <span style="color:var(--gray-500);">${trackTime}</span>
+                                ${track.description || track.message ? `<div style="color:var(--gray-600);">${track.description || track.message}</div>` : ''}
+                                </div>
+                            </div>`;
+                        }).join('')}
+                        ${orderTracking.length > 3 ? `<div style="font-size:10px;color:var(--gray-500);">还有 ${orderTracking.length - 3} 条轨迹记录</div>` : ''}
+                    </div>`;
+                }
+
+                const trackingLink = tracking ? `<a href="https://t.17track.net/zh-cn#nums=${tracking}" target="_blank" style="font-size:11px;color:var(--primary);text-decoration:none;margin-left:6px;"><i class="fas fa-globe"></i> 17Track查询</a>` : '';
+
+                return `<div style="background:var(--input-bg);padding:12px;border-radius:8px;margin-bottom:8px;font-size:12px;border-left:3px solid ${typeColor};">
                     <div style="display:flex;justify-content:space-between;align-items:center;">
-                        <strong>${order.id}</strong>
-                        <span style="font-size:11px;color:var(--primary);">${type}</span>
+                        <div style="display:flex;align-items:center;gap:6px;">
+                            <strong style="font-size:14px;">${order.id}</strong>
+                            <span style="font-size:10px;background:${typeColor};color:#fff;padding:1px 6px;border-radius:4px;">${type}</span>
+                        </div>
+                        <div style="padding:2px 10px;background:var(--success);color:#fff;border-radius:12px;font-size:11px;">${status}</div>
                     </div>
-                    <div style="margin-top:4px;color:var(--gray-600);">
-                        ${origin} → ${dest} | 状态: <strong>${status}</strong>
+                    <div style="margin-top:6px;font-size:13px;">
+                        <span style="margin-right:10px;"><i class="fas fa-map-marker-alt"></i> ${origin} → ${dest}</span>
                     </div>
-                    ${tracking !== '-' ? `<div style="margin-top:2px;color:var(--gray-600);">转单号: ${tracking}</div>` : ''}
+                    <div style="margin-top:4px;color:var(--gray-600);font-size:11px;">
+                        <span style="margin-right:10px;"><i class="far fa-clock"></i> ${orderDate}</span>
+                        <span style="margin-right:10px;"><i class="fas fa-box"></i> ${pieces}件</span>
+                        ${weightInfo}
+                    </div>
+                    <div style="margin-top:4px;color:var(--gray-600);font-size:11px;">
+                        <span style="margin-right:10px;"><i class="fas fa-truck"></i> ${transportMethod}</span>
+                    </div>
+                    ${goodsInfo !== '-' ? `<div style="margin-top:4px;color:var(--gray-600);font-size:11px;"><i class="fas fa-info-circle"></i> ${goodsInfo}</div>` : ''}
+                    ${tracking ? `<div style="margin-top:4px;color:var(--gray-600);font-size:11px;"><i class="fas fa-barcode"></i> 转单号: <strong>${tracking}</strong>${trackingLink}</div>` : ''}
+                    ${trackingTimelineHtml}
                 </div>`;
             }).join('');
 
-            const moreInfo = results.length > 5 ? `<div style="font-size:11px;color:var(--gray-500);">还有 ${results.length - 5} 条匹配结果...</div>` : '';
+            const moreInfo = results.length > 5 ? `<div style="font-size:11px;color:var(--gray-500);">还有 ${results.length - 5} 条匹配结果，请到系统后台查看完整列表</div>` : '';
 
             return `<div style="margin-bottom:8px;">🔍 查询到 <strong>${results.length}</strong> 条匹配记录：</div>${display}${moreInfo}`;
         }
@@ -16889,47 +17023,88 @@ Content-Type: application/json</pre>
         function getTemplateResponseEnhanced(message) {
             const lowerMsg = message.toLowerCase();
             
-            // 优先检查人工请求
             if (lowerMsg.includes('人工') || lowerMsg.includes('转人工')) {
                 return "正在为您转接人工客服，请稍候...<br><button class='btn btn-sm btn-primary' onclick='showHumanServiceModal()' style='margin-top:5px;'>点击查看联系方式</button>";
             }
 
-            // 欢迎语
-            if (['你好', '您好', 'hello', 'hi'].some(k => lowerMsg.includes(k))) {
-                return "您好！我是HCN智能客服。<br>• <strong>查单号</strong>：直接输入运单号<br>• <strong>查运价</strong>：输入“xx到xx 多少钱”<br>• <strong>人工服务</strong>：输入“转人工”";
+            if (['你好', '您好', 'hello', 'hi', '嗨', '在吗'].some(k => lowerMsg.includes(k))) {
+                return "您好！我是HCN智能客服，很高兴为您服务！<br><br>我可以帮您：<br>• <strong>查单号</strong>：直接输入运单号/订单号即可查询详细物流信息<br>• <strong>查运价</strong>：输入运费、报价<br>• <strong>查时效</strong>：输入时效、多久到<br>• <strong>查禁运品</strong>：输入禁运品、不能发什么<br>• <strong>查体积重</strong>：输入体积重怎么算<br>• <strong>查包装</strong>：输入包装要求<br>• <strong>查清关</strong>：输入清关、报关<br>• <strong>查保险</strong>：输入保险、理赔<br>• <strong>查服务</strong>：输入海运、空运、贴标<br>• <strong>人工服务</strong>：输入转人工<br><br>请直接输入您的问题或单号！";
             }
 
-            // 禁运品
-            if (lowerMsg.includes('禁运') || lowerMsg.includes('不能发') || lowerMsg.includes('危险品')) {
-                return "常见<strong>禁运品</strong>包括：<br>• 易燃易爆物品（如油漆、锂电池纯电）<br>• 腐蚀性化学品<br>• 武器弹药及零部件<br>• 鲜活食品（特定航线除外）<br>• 磁性物品（需做消磁检测）<br><br>带电池的电子产品（如手机）可以发，但必须做好绝缘保护。";
+            if (lowerMsg.includes('禁运') || lowerMsg.includes('不能发') || lowerMsg.includes('危险品') || lowerMsg.includes('什么不能寄') || lowerMsg.includes('违禁品')) {
+                return "常见<strong>禁运品</strong>包括：<br>• 易燃易爆物品（如油漆、锂电池纯电）<br>• 腐蚀性化学品<br>• 武器弹药及零部件<br>• 鲜活食品（特定航线除外）<br>• 磁性物品（需做消磁检测）<br>• 毒品及精神类药物<br>• 仿冒品牌商品<br><br>带电池的电子产品（如手机）可以发，但必须做好绝缘保护。具体请咨询客服确认。";
             }
 
-            // 体积重
-            if (lowerMsg.includes('体积重') || lowerMsg.includes('怎么算')) {
-                return "体积重计算公式：<br><strong>长×宽×高 ÷ 6000</strong> (空运通常除以6000，海运除以5000)。<br>计费重量取实际重量和体积重中的较大者。<br>例如：50cm×40cm×30cm的箱子，体积重为10kg。";
+            if (lowerMsg.includes('体积重') || lowerMsg.includes('怎么算') || lowerMsg.includes('计费重')) {
+                return "体积重计算公式：<br><strong>长(cm)×宽(cm)×高(cm) ÷ 6000</strong> (空运通常除以6000，海运除以5000)。<br><br>计费重量取实际重量和体积重中的<strong>较大者</strong>。<br><br>例如：50cm×40cm×30cm的箱子，体积重 = 50×40×30÷6000 = 10kg。如果实际重量8kg，则按10kg计费。";
             }
 
-            // 时效
-            if (lowerMsg.includes('多久') || lowerMsg.includes('时效')) {
-                return "参考时效（仅供参考）：<br>• <strong>美国空运</strong>：5-8个工作日<br>• <strong>欧洲空运</strong>：7-10个工作日<br>• <strong>日本海运</strong>：15-20天<br>• <strong>国内快递</strong>：1-3天<br>（时效受海关查验、天气等不可抗力因素影响）";
+            if (lowerMsg.includes('多久') || lowerMsg.includes('时效') || lowerMsg.includes('几天') || lowerMsg.includes('什么时候到')) {
+                return "参考时效（仅供参考，受海关、天气等因素影响）：<br><br>🚢 <strong>海运整柜</strong>：<br>• 东南亚：7-15天<br>• 欧洲：25-35天<br>• 美洲：15-30天<br>• 中东：15-25天<br>• 日本：7-12天<br><br>✈️ <strong>空运</strong>：3-7天<br>🚛 <strong>陆运</strong>：3-10天<br>📦 <strong>快递</strong>：3-5天<br><br>💡 输入单号可查询具体订单的实时状态。";
             }
 
-            // 包装
-            if (lowerMsg.includes('包装') || lowerMsg.includes('怎么包')) {
-                return "包装建议：<br>1. 纸箱必须坚固，无破损。<br>2. 易碎品内部需填充气泡膜或泡沫。<br>3. 重货建议使用木箱打包。<br>4. 严禁使用报纸直接接触货物（油墨可能污染）。<br>5. 每箱重量建议不超过20kg以便搬运。";
+            if (lowerMsg.includes('包装') || lowerMsg.includes('怎么包') || lowerMsg.includes('打包')) {
+                return "包装建议：<br>1. 纸箱必须坚固，无破损<br>2. 易碎品内部需填充气泡膜或泡沫<br>3. 重货建议使用木箱打包<br>4. 严禁使用报纸直接接触货物（油墨可能污染）<br>5. 每箱重量建议不超过20kg以便搬运<br>6. 液体货物需密封防漏<br>7. 带电池货物需做好绝缘保护<br><br>我们提供专业打包服务，详情请联系客服。";
             }
 
-            // 报价
-            if (lowerMsg.includes('价格') || lowerMsg.includes('多少钱') || lowerMsg.includes('报价')) {
-                return "由于运价受燃油附加费、季节性波动影响，具体报价请联系客服。<br>您可以提供：<br>1. 起运地和目的地城市<br>2. 货物尺寸和重量<br>3. 是否需要上门提货<br>客服热线：19098018917";
+            if (lowerMsg.includes('价格') || lowerMsg.includes('多少钱') || lowerMsg.includes('报价') || lowerMsg.includes('运费') || lowerMsg.includes('费用') || lowerMsg.includes('收费')) {
+                return "由于运价受燃油附加费、季节性波动影响，具体报价请联系客服。<br><br>您可以提供以下信息获取报价：<br>1. 起运地和目的地城市<br>2. 货物尺寸和重量<br>3. 是否需要上门提货<br>4. 是否需要贴标/清关等增值服务<br><br>📞 客服热线：19098018917";
+            }
+
+            if (lowerMsg.includes('清关') || lowerMsg.includes('报关') || lowerMsg.includes('海关') || lowerMsg.includes('关税')) {
+                return "关于清关报关：<br><br>📋 <strong>出口报关</strong>：<br>• 需提供：装箱单、发票、合同<br>• 报关时间：1-2个工作日<br><br>📋 <strong>进口清关</strong>：<br>• 需提供：提单、装箱单、发票<br>• 清关时间：因国家而异，一般3-7个工作日<br><br>💰 <strong>关税</strong>：<br>• 根据目的国海关规定收取<br>• 不同品类税率不同<br><br>💡 我们提供双清包税服务，详情请联系客服。";
+            }
+
+            if (lowerMsg.includes('保险') || lowerMsg.includes('理赔') || lowerMsg.includes('损坏') || lowerMsg.includes('丢失') || lowerMsg.includes('赔偿')) {
+                return "关于保险与理赔：<br><br>🛡️ <strong>保险服务</strong>：<br>• 货物运输保险<br>• 全险/基本险可选<br>• 保费一般为货值的0.3%-1%<br><br>📝 <strong>理赔流程</strong>：<br>1. 发现货损后立即拍照留证<br>2. 联系业务员报备<br>3. 提交理赔材料（照片、价值证明等）<br>4. 保险公司审核<br>5. 赔付到账<br><br>⚠️ 请在收货时当场验货，如有问题立即联系客服。";
+            }
+
+            if (lowerMsg.includes('流程') || lowerMsg.includes('怎么操作') || lowerMsg.includes('怎么下单') || lowerMsg.includes('步骤') || lowerMsg.includes('如何发货')) {
+                return "发货流程：<br><br>1️⃣ 联系业务员确认运输方案和报价<br>2️⃣ 确认货物信息（品名/件数/重量/体积）<br>3️⃣ 安排货物入库或上门提货<br>4️⃣ 货物入库称重量方<br>5️⃣ 确认装柜/发货<br>6️⃣ 通过本系统查询物流轨迹<br>7️⃣ 货物到达后安排派送<br><br>💡 如有任何疑问，随时联系我们的业务员。";
+            }
+
+            if (lowerMsg.includes('海运') || lowerMsg.includes('整柜') || lowerMsg.includes('拼箱') || lowerMsg.includes('fcl') || lowerMsg.includes('lcl')) {
+                return "海运服务：<br><br>🚢 <strong>整柜运输（FCL）</strong>：<br>• 20GP（20尺小柜）<br>• 40GP（40尺平柜）<br>• 40HC（40尺高柜）<br>• 适合大批量货物<br><br>📦 <strong>拼箱运输（LCL）</strong>：<br>• 按体积/重量计费<br>• 适合小批量货物<br>• 性价比高<br><br>📋 <strong>双清包税专线</strong>：<br>• 包含出口报关+进口清关<br>• 门到门服务<br><br>💡 具体航线和报价请联系客服。";
+            }
+
+            if (lowerMsg.includes('空运') || lowerMsg.includes('航班') || lowerMsg.includes('飞机')) {
+                return "空运服务：<br><br>✈️ <strong>国际空运</strong>：<br>• 时效快：3-7天<br>• 适合紧急货物<br>• 支持门到门<br><br>📦 <strong>快递专线</strong>：<br>• DHL/FedEx/UPS等<br>• 3-5天送达<br>• 全程追踪<br><br>💡 空运按体积重和实际重取大值计费，建议提前确认货物尺寸。";
+            }
+
+            if (lowerMsg.includes('贴标') || lowerMsg.includes('标签') || lowerMsg.includes('换标')) {
+                return "贴标服务：<br><br>🏷️ <strong>服务内容</strong>：<br>• 原标签移除<br>• 新标签粘贴<br>• 条码/二维码贴标<br>• 中英文标签<br><br>💰 <strong>费用</strong>：按件计费，具体价格请联系客服<br>⏰ <strong>时效</strong>：1-2个工作日完成<br><br>💡 贴标服务需提前预约，请在入库时告知贴标需求。";
+            }
+
+            if (lowerMsg.includes('仓库') || lowerMsg.includes('入库') || lowerMsg.includes('存储') || lowerMsg.includes('存货')) {
+                return "仓储服务：<br><br>🏢 <strong>仓库服务</strong>：<br>• 货物入库登记<br>• 货物存储管理<br>• 出库发货安排<br>• 仓库拍照存档<br><br>📦 <strong>入库流程</strong>：<br>1. 货物到达仓库<br>2. 清点件数、称重、量方<br>3. 拍照存档<br>4. 系统录入<br><br>⏰ <strong>免费仓储期</strong>：7天（超期按天计费）<br>💡 如需查询仓库存货信息，请联系业务员。";
+            }
+
+            if (lowerMsg.includes('投诉') || lowerMsg.includes('问题') || lowerMsg.includes('异常') || lowerMsg.includes('延迟') || lowerMsg.includes('延误')) {
+                return "非常抱歉给您带来不便！<br><br>📞 <strong>问题反馈渠道</strong>：<br>1. 直接联系您的业务员<br>2. 通过本客服系统反馈<br>3. 拨打客服热线：19098018917<br><br>⏰ <strong>处理时效</strong>：<br>• 一般问题：24小时内响应<br>• 紧急问题：2小时内响应<br>• 理赔问题：3-5个工作日<br><br>💡 请提供订单号和问题描述，我们会尽快为您处理。";
+            }
+
+            if (lowerMsg.includes('电池') || lowerMsg.includes('带电') || lowerMsg.includes('锂电池') || lowerMsg.includes('充电宝')) {
+                return "关于带电货物：<br><br>🔋 <strong>可以发的带电产品</strong>：<br>• 手机、平板等内置电池产品<br>• 蓝牙耳机、智能手表等<br>• 需做好绝缘保护<br><br>⚠️ <strong>限制/禁止</strong>：<br>• 纯电池（如18650锂电池）需特殊渠道<br>• 充电宝容量超过100Wh需审批<br>• 超过2个充电宝通常不可发<br><br>💡 具体请提供电池类型和容量，联系客服确认可否发货。";
+            }
+
+            if (lowerMsg.includes('日本') || lowerMsg.includes('美国') || lowerMsg.includes('欧洲') || lowerMsg.includes('东南亚') || lowerMsg.includes('中东')) {
+                const regionInfo = {
+                    '日本': '日本航线：海运7-12天，空运2-4天。主要港口：东京、大阪、横滨。',
+                    '美国': '美国航线：海运15-30天，空运5-8天。主要港口：洛杉矶、纽约、西雅图。',
+                    '欧洲': '欧洲航线：海运25-35天，空运5-10天。主要港口：鹿特丹、汉堡、费利克斯托。',
+                    '东南亚': '东南亚航线：海运7-15天，空运2-5天。主要港口：曼谷、胡志明、雅加达。',
+                    '中东': '中东航线：海运15-25天，空运3-7天。主要港口：迪拜、达曼、阿布扎比。'
+                };
+                for (const [region, info] of Object.entries(regionInfo)) {
+                    if (lowerMsg.includes(region)) return info + '<br><br>💡 输入单号可查询具体订单状态，如需报价请联系客服：19098018917';
+                }
             }
 
             if (/^[a-z0-9\-_]{4,}$/.test(lowerMsg) && !lowerMsg.includes(' ')) {
                 return `未在系统中找到单号 "<strong>${message}</strong>" 的匹配记录。<br><br>💡 请检查：<br>1. 单号是否输入正确<br>2. 该订单是否已录入系统<br>3. 尝试输入完整单号（如HCN开头）<br><br>如需帮助，请联系客服：19098018917`;
             }
 
-            // 默认回复
-            return "抱歉，我暂时无法理解这个问题。<br>您可以尝试：<br>1. 简化提问，例如“运价”、“时效”；<br>2. 输入关键字，如“电池”、“日本”；<br>3. 咨询人工客服：19098018917。";
+            return "抱歉，我暂时无法理解这个问题。<br><br>您可以尝试：<br>1. 📦 <strong>查单号</strong>：直接输入运单号查询<br>2. 💰 <strong>查运价</strong>：输入运费、报价<br>3. ⏰ <strong>查时效</strong>：输入时效、多久到<br>4. 📋 <strong>查流程</strong>：输入怎么发货<br>5. 🏷️ <strong>查服务</strong>：输入海运、空运、贴标<br>6. 📞 <strong>人工客服</strong>：输入转人工<br><br>或直接拨打客服热线：19098018917";
         }
 
         // 实现拖拽逻辑
@@ -22850,6 +23025,7 @@ Content-Type: application/json</pre>
             // 新增：AI配置加载
             document.getElementById('ai-api-endpoint').value = settings.aiApiEndpoint || '';
             document.getElementById('ai-api-key').value = settings.aiApiKey || '';
+            document.getElementById('ai-model').value = settings.aiModel || 'deepseek-chat';
             
             // 加载Logo设置预览
             const customLogo = localStorage.getItem('customLogo');
@@ -22962,6 +23138,7 @@ Content-Type: application/json</pre>
                 // 保存AI配置
                 settings.aiApiEndpoint = document.getElementById('ai-api-endpoint').value;
                 settings.aiApiKey = document.getElementById('ai-api-key').value;
+                settings.aiModel = document.getElementById('ai-model').value;
 
                 // 保存到本地存储
                 localStorage.setItem('settings', JSON.stringify(settings));
