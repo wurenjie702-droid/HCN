@@ -7688,53 +7688,74 @@ Content-Type: application/json</pre>
                 if (result.success && result.data) {
                     const cloudData = result.data;
 
+                    const cloudDeletedIds = new Set();
+                    if (Array.isArray(cloudData.deleted_records)) {
+                        cloudData.deleted_records.forEach(r => {
+                            if (r && r.id) cloudDeletedIds.add(r.id);
+                        });
+                    }
+                    const localDeletedIds = new Set();
+                    [deletedCustomers, deletedShipments, deletedBusinessOrders, deletedContainerOrders, deletedWarehouseEntries, deletedOutboundEntries].forEach(arr => {
+                        (arr || []).forEach(item => { if (item && item.id) localDeletedIds.add(item.id); });
+                    });
+                    const allDeletedIds = new Set([...cloudDeletedIds, ...localDeletedIds]);
+
+                    function filterCloudDeleted(items) {
+                        return (items || []).filter(item => {
+                            if (!item) return false;
+                            if (allDeletedIds.has(item.id)) return false;
+                            if (item.deleted_at) return false;
+                            return true;
+                        });
+                    }
+
                     if (cloudData.customers && cloudData.customers.length > 0) {
-                        customers = cloudData.customers;
+                        customers = filterCloudDeleted(cloudData.customers);
                         safeSetItem('customers', JSON.stringify(customers));
                     }
                     if (cloudData.shipments && cloudData.shipments.length > 0) {
-                        shipments = cloudData.shipments;
+                        shipments = filterCloudDeleted(cloudData.shipments);
                         safeSetItem('shipments', JSON.stringify(shipments));
                     }
                     if (cloudData.tracking_history && cloudData.tracking_history.length > 0) {
-                        trackingHistory = cloudData.tracking_history;
+                        trackingHistory = filterCloudDeleted(cloudData.tracking_history);
                         safeSetItem('trackingHistory', JSON.stringify(trackingHistory));
                         try { localStorage.setItem('trackingHistory', JSON.stringify(trackingHistory)); } catch(e) {}
                     }
                     if (cloudData.business_orders && cloudData.business_orders.length > 0) {
-                        businessOrders = normalizeBusinessOrders(cloudData.business_orders);
+                        businessOrders = normalizeBusinessOrders(filterCloudDeleted(cloudData.business_orders));
                         safeSetItem('businessOrders', JSON.stringify(businessOrders));
                     }
                     if (cloudData.container_orders && cloudData.container_orders.length > 0) {
-                        containerOrders = normalizeContainerOrders(cloudData.container_orders);
+                        containerOrders = normalizeContainerOrders(filterCloudDeleted(cloudData.container_orders));
                         safeSetItem('containerOrders', JSON.stringify(containerOrders));
                     }
                     if (cloudData.warehouse_entries && cloudData.warehouse_entries.length > 0) {
-                        warehouseEntries = cloudData.warehouse_entries;
+                        warehouseEntries = filterCloudDeleted(cloudData.warehouse_entries);
                         safeSetItem('warehouseEntries', JSON.stringify(warehouseEntries));
                     }
                     if (cloudData.outbound_entries && cloudData.outbound_entries.length > 0) {
-                        outboundEntries = cloudData.outbound_entries;
+                        outboundEntries = filterCloudDeleted(cloudData.outbound_entries);
                         safeSetItem('outboundEntries', JSON.stringify(outboundEntries));
                     }
                     if (cloudData.suppliers && cloudData.suppliers.length > 0) {
-                        suppliers = cloudData.suppliers;
+                        suppliers = filterCloudDeleted(cloudData.suppliers);
                         safeSetItem('suppliers', JSON.stringify(suppliers));
                     }
                     if (cloudData.contracts && cloudData.contracts.length > 0) {
-                        contracts = cloudData.contracts;
+                        contracts = filterCloudDeleted(cloudData.contracts);
                         safeSetItem('contracts', JSON.stringify(contracts));
                     }
                     if (cloudData.invoices && cloudData.invoices.length > 0) {
-                        invoices = cloudData.invoices;
+                        invoices = filterCloudDeleted(cloudData.invoices);
                         safeSetItem('invoices', JSON.stringify(invoices));
                     }
                     if (cloudData.payments && cloudData.payments.length > 0) {
-                        payments = cloudData.payments;
+                        payments = filterCloudDeleted(cloudData.payments);
                         safeSetItem('payments', JSON.stringify(payments));
                     }
                     if (cloudData.inquiry_records && cloudData.inquiry_records.length > 0) {
-                        inquiryRecords = cloudData.inquiry_records;
+                        inquiryRecords = filterCloudDeleted(cloudData.inquiry_records);
                         safeSetItem('inquiryRecords', JSON.stringify(inquiryRecords));
                     }
                     if (cloudData.settings && cloudData.settings.length > 0) {
@@ -19582,7 +19603,6 @@ ${businessContext}
                 return;
             }
 
-            // 弹出删除选项对话框
             const content = `
                 <div style="padding: 20px;">
                     <div style="margin-bottom: 20px;">
@@ -19606,11 +19626,9 @@ ${businessContext}
             ]);
         }
         
-        // 软删除选中的运单
         function softDeleteSelectedArchives() {
             const selectedShipments = shipments.filter(s => selectedArchiveIds.includes(s.id));
             
-            // 添加到历史删除列表
             selectedShipments.forEach(shipment => {
                 deletedShipments.push({
                     ...shipment,
@@ -19619,14 +19637,14 @@ ${businessContext}
                 });
             });
             
-            // 从主列表中移除
             shipments = shipments.filter(shipment => !selectedArchiveIds.includes(shipment.id));
             
-            // 先删除云端数据，再保存本地数据
+            saveData('shipments', shipments);
+            saveData('deletedShipments', deletedShipments);
+            
             const idsToDelete = [...selectedArchiveIds];
-            Promise.all(idsToDelete.map(id => syncDeleteFromCloud('shipments', id))).then(() => {
-                saveData('shipments', shipments);
-                saveData('deletedShipments', deletedShipments);
+            Promise.all(idsToDelete.map(id => syncDeleteFromCloud('shipments', id))).catch(err => {
+                console.warn('云端删除失败，将在下次同步时重试:', err);
             });
             
             selectedArchiveIds = [];
@@ -19636,7 +19654,6 @@ ${businessContext}
             showNotification(`已将 ${selectedShipments.length} 个运单移至历史删除列表`, 'success');
         }
         
-        // 硬删除选中的运单
         function hardDeleteSelectedArchives() {
             if (!confirm(`确定要永久删除选中的 ${selectedArchiveIds.length} 个运单吗？此操作不可撤销！`)) {
                 return;
@@ -19644,7 +19661,6 @@ ${businessContext}
             
             const selectedShipments = shipments.filter(s => selectedArchiveIds.includes(s.id));
             
-            // 添加到历史删除列表（标记为永久删除）
             selectedShipments.forEach(shipment => {
                 deletedShipments.push({
                     ...shipment,
@@ -19653,14 +19669,14 @@ ${businessContext}
                 });
             });
             
-            // 从主列表中移除
             shipments = shipments.filter(shipment => !selectedArchiveIds.includes(shipment.id));
             
-            // 先删除云端数据，再保存本地数据
+            saveData('shipments', shipments);
+            saveData('deletedShipments', deletedShipments);
+            
             const idsToDelete = [...selectedArchiveIds];
-            Promise.all(idsToDelete.map(id => syncDeleteFromCloud('shipments', id))).then(() => {
-                saveData('shipments', shipments);
-                saveData('deletedShipments', deletedShipments);
+            Promise.all(idsToDelete.map(id => syncDeleteFromCloud('shipments', id))).catch(err => {
+                console.warn('云端删除失败，将在下次同步时重试:', err);
             });
             
             selectedArchiveIds = [];
@@ -24240,15 +24256,14 @@ PORT=3000</pre>
                 
                 if (cloudflareConnected) {
                     console.log('Cloudflare D1 已连接，自动同步已启动');
-                    const hasLocalData = shipments.length > 0 || customers.length > 0 || orders.length > 0;
+                    const hasLocalData = shipments.length > 0 || customers.length > 0 || orders.length > 0 || warehouseEntries.length > 0 || businessOrders.length > 0 || containerOrders.length > 0;
                     if (hasLocalData) {
                         console.log('检测到本地数据，正在上传到云端...');
                         await saveAllDataToCloud();
                     }
                     await loadAllDataFromCloud(true);
                 } else if (supabaseConnected) {
-                    // 如果本地有数据，先上传到云端
-                    const hasLocalData = shipments.length > 0 || customers.length > 0 || orders.length > 0;
+                    const hasLocalData = shipments.length > 0 || customers.length > 0 || orders.length > 0 || warehouseEntries.length > 0 || businessOrders.length > 0 || containerOrders.length > 0;
                     if (hasLocalData) {
                         console.log('检测到本地数据，正在上传到云端...');
                         await saveAllDataToCloud();
@@ -25947,7 +25962,9 @@ async function syncToCloudflare() {
             deletedCustomers: deletedCustomers || [],
             deletedShipments: deletedShipments || [],
             deletedBusinessOrders: deletedBusinessOrders || [],
-            deletedContainerOrders: deletedContainerOrders || []
+            deletedContainerOrders: deletedContainerOrders || [],
+            deletedWarehouseEntries: deletedWarehouseEntries || [],
+            deletedOutboundEntries: deletedOutboundEntries || []
         };
         
         const res = await fetch(`${workerUrl}/api/sync`, {
@@ -25996,52 +26013,73 @@ async function restoreFromCloudflare() {
         if (data.success && data.data) {
             const cloudData = data.data;
             
+            const cloudDeletedIds = new Set();
+            if (Array.isArray(cloudData.deleted_records)) {
+                cloudData.deleted_records.forEach(r => {
+                    if (r && r.id) cloudDeletedIds.add(r.id);
+                });
+            }
+            const localDeletedIds = new Set();
+            [deletedCustomers, deletedShipments, deletedBusinessOrders, deletedContainerOrders, deletedWarehouseEntries, deletedOutboundEntries].forEach(arr => {
+                (arr || []).forEach(item => { if (item && item.id) localDeletedIds.add(item.id); });
+            });
+            const allDeletedIds = new Set([...cloudDeletedIds, ...localDeletedIds]);
+
+            function filterRestoreDeleted(items) {
+                return (items || []).filter(item => {
+                    if (!item) return false;
+                    if (allDeletedIds.has(item.id)) return false;
+                    if (item.deleted_at) return false;
+                    return true;
+                });
+            }
+
             if (cloudData.customers && cloudData.customers.length > 0) {
-                customers = cloudData.customers;
+                customers = filterRestoreDeleted(cloudData.customers);
                 safeSetItem('customers', JSON.stringify(customers));
             }
             if (cloudData.shipments && cloudData.shipments.length > 0) {
-                shipments = cloudData.shipments;
+                shipments = filterRestoreDeleted(cloudData.shipments);
                 safeSetItem('shipments', JSON.stringify(shipments));
             }
             if (cloudData.business_orders && cloudData.business_orders.length > 0) {
-                businessOrders = normalizeBusinessOrders(cloudData.business_orders);
+                businessOrders = normalizeBusinessOrders(filterRestoreDeleted(cloudData.business_orders));
                 safeSetItem('businessOrders', JSON.stringify(businessOrders));
             }
             if (cloudData.container_orders && cloudData.container_orders.length > 0) {
-                containerOrders = normalizeContainerOrders(cloudData.container_orders);
+                containerOrders = normalizeContainerOrders(filterRestoreDeleted(cloudData.container_orders));
                 safeSetItem('containerOrders', JSON.stringify(containerOrders));
             }
             if (cloudData.warehouse_entries && cloudData.warehouse_entries.length > 0) {
-                warehouseEntries = cloudData.warehouse_entries;
+                warehouseEntries = filterRestoreDeleted(cloudData.warehouse_entries);
                 safeSetItem('warehouseEntries', JSON.stringify(warehouseEntries));
             }
             if (cloudData.outbound_entries && cloudData.outbound_entries.length > 0) {
-                outboundEntries = cloudData.outbound_entries;
+                outboundEntries = filterRestoreDeleted(cloudData.outbound_entries);
                 safeSetItem('outboundEntries', JSON.stringify(outboundEntries));
             }
             if (cloudData.suppliers && cloudData.suppliers.length > 0) {
-                suppliers = cloudData.suppliers;
+                suppliers = filterRestoreDeleted(cloudData.suppliers);
                 safeSetItem('suppliers', JSON.stringify(suppliers));
             }
             if (cloudData.contracts && cloudData.contracts.length > 0) {
-                contracts = cloudData.contracts;
+                contracts = filterRestoreDeleted(cloudData.contracts);
                 safeSetItem('contracts', JSON.stringify(contracts));
             }
             if (cloudData.invoices && cloudData.invoices.length > 0) {
-                invoices = cloudData.invoices;
+                invoices = filterRestoreDeleted(cloudData.invoices);
                 safeSetItem('invoices', JSON.stringify(invoices));
             }
             if (cloudData.payments && cloudData.payments.length > 0) {
-                payments = cloudData.payments;
+                payments = filterRestoreDeleted(cloudData.payments);
                 safeSetItem('payments', JSON.stringify(payments));
             }
             if (cloudData.inquiry_records && cloudData.inquiry_records.length > 0) {
-                inquiryRecords = cloudData.inquiry_records;
+                inquiryRecords = filterRestoreDeleted(cloudData.inquiry_records);
                 safeSetItem('inquiryRecords', JSON.stringify(inquiryRecords));
             }
             if (cloudData.tracking_history && cloudData.tracking_history.length > 0) {
-                trackingHistory = cloudData.tracking_history;
+                trackingHistory = filterRestoreDeleted(cloudData.tracking_history);
                 safeSetItem('trackingHistory', JSON.stringify(trackingHistory));
                 try { localStorage.setItem('trackingHistory', JSON.stringify(trackingHistory)); } catch(e) {}
             }
@@ -26166,7 +26204,9 @@ async function syncToCloudflareSidebar() {
             deletedCustomers: deletedCustomers || [],
             deletedShipments: deletedShipments || [],
             deletedBusinessOrders: deletedBusinessOrders || [],
-            deletedContainerOrders: deletedContainerOrders || []
+            deletedContainerOrders: deletedContainerOrders || [],
+            deletedWarehouseEntries: deletedWarehouseEntries || [],
+            deletedOutboundEntries: deletedOutboundEntries || []
         };
         
         const res = await fetch(`${workerUrl}/api/sync`, {
@@ -26217,52 +26257,73 @@ async function restoreFromCloudflareSidebar() {
         if (data.success && data.data) {
             const cloudData = data.data;
             
+            const cloudDeletedIds = new Set();
+            if (Array.isArray(cloudData.deleted_records)) {
+                cloudData.deleted_records.forEach(r => {
+                    if (r && r.id) cloudDeletedIds.add(r.id);
+                });
+            }
+            const localDeletedIds = new Set();
+            [deletedCustomers, deletedShipments, deletedBusinessOrders, deletedContainerOrders, deletedWarehouseEntries, deletedOutboundEntries].forEach(arr => {
+                (arr || []).forEach(item => { if (item && item.id) localDeletedIds.add(item.id); });
+            });
+            const allDeletedIds = new Set([...cloudDeletedIds, ...localDeletedIds]);
+
+            function filterSidebarDeleted(items) {
+                return (items || []).filter(item => {
+                    if (!item) return false;
+                    if (allDeletedIds.has(item.id)) return false;
+                    if (item.deleted_at) return false;
+                    return true;
+                });
+            }
+
             if (cloudData.customers && cloudData.customers.length > 0) {
-                customers = cloudData.customers;
+                customers = filterSidebarDeleted(cloudData.customers);
                 safeSetItem('customers', JSON.stringify(customers));
             }
             if (cloudData.shipments && cloudData.shipments.length > 0) {
-                shipments = cloudData.shipments;
+                shipments = filterSidebarDeleted(cloudData.shipments);
                 safeSetItem('shipments', JSON.stringify(shipments));
             }
             if (cloudData.business_orders && cloudData.business_orders.length > 0) {
-                businessOrders = normalizeBusinessOrders(cloudData.business_orders);
+                businessOrders = normalizeBusinessOrders(filterSidebarDeleted(cloudData.business_orders));
                 safeSetItem('businessOrders', JSON.stringify(businessOrders));
             }
             if (cloudData.container_orders && cloudData.container_orders.length > 0) {
-                containerOrders = normalizeContainerOrders(cloudData.container_orders);
+                containerOrders = normalizeContainerOrders(filterSidebarDeleted(cloudData.container_orders));
                 safeSetItem('containerOrders', JSON.stringify(containerOrders));
             }
             if (cloudData.warehouse_entries && cloudData.warehouse_entries.length > 0) {
-                warehouseEntries = cloudData.warehouse_entries;
+                warehouseEntries = filterSidebarDeleted(cloudData.warehouse_entries);
                 safeSetItem('warehouseEntries', JSON.stringify(warehouseEntries));
             }
             if (cloudData.outbound_entries && cloudData.outbound_entries.length > 0) {
-                outboundEntries = cloudData.outbound_entries;
+                outboundEntries = filterSidebarDeleted(cloudData.outbound_entries);
                 safeSetItem('outboundEntries', JSON.stringify(outboundEntries));
             }
             if (cloudData.suppliers && cloudData.suppliers.length > 0) {
-                suppliers = cloudData.suppliers;
+                suppliers = filterSidebarDeleted(cloudData.suppliers);
                 safeSetItem('suppliers', JSON.stringify(suppliers));
             }
             if (cloudData.contracts && cloudData.contracts.length > 0) {
-                contracts = cloudData.contracts;
+                contracts = filterSidebarDeleted(cloudData.contracts);
                 safeSetItem('contracts', JSON.stringify(contracts));
             }
             if (cloudData.invoices && cloudData.invoices.length > 0) {
-                invoices = cloudData.invoices;
+                invoices = filterSidebarDeleted(cloudData.invoices);
                 safeSetItem('invoices', JSON.stringify(invoices));
             }
             if (cloudData.payments && cloudData.payments.length > 0) {
-                payments = cloudData.payments;
+                payments = filterSidebarDeleted(cloudData.payments);
                 safeSetItem('payments', JSON.stringify(payments));
             }
             if (cloudData.inquiry_records && cloudData.inquiry_records.length > 0) {
-                inquiryRecords = cloudData.inquiry_records;
+                inquiryRecords = filterSidebarDeleted(cloudData.inquiry_records);
                 safeSetItem('inquiryRecords', JSON.stringify(inquiryRecords));
             }
             if (cloudData.tracking_history && cloudData.tracking_history.length > 0) {
-                trackingHistory = cloudData.tracking_history;
+                trackingHistory = filterSidebarDeleted(cloudData.tracking_history);
                 safeSetItem('trackingHistory', JSON.stringify(trackingHistory));
                 try { localStorage.setItem('trackingHistory', JSON.stringify(trackingHistory)); } catch(e) {}
             }
@@ -26428,11 +26489,21 @@ async function pullCloudflareData(workerUrl) {
         const allDeletedIds = new Set();
         const deletedArrays = [deletedCustomers, deletedShipments, deletedBusinessOrders, deletedContainerOrders, deletedWarehouseEntries, deletedOutboundEntries];
         deletedArrays.forEach(arr => {
-            (arr || []).forEach(item => allDeletedIds.add(item.id));
+            (arr || []).forEach(item => { if (item && item.id) allDeletedIds.add(item.id); });
         });
+        if (Array.isArray(cloudData.deleted_records)) {
+            cloudData.deleted_records.forEach(r => {
+                if (r && r.id) allDeletedIds.add(r.id);
+            });
+        }
 
         function filterDeleted(items) {
-            return (items || []).filter(item => !allDeletedIds.has(item.id));
+            return (items || []).filter(item => {
+                if (!item) return false;
+                if (allDeletedIds.has(item.id)) return false;
+                if (item.deleted_at) return false;
+                return true;
+            });
         }
 
         if (cloudData.customers && cloudData.customers.length > 0) {
@@ -26498,55 +26569,61 @@ async function pullCloudflareData(workerUrl) {
             }
         }
         if (cloudData.suppliers && cloudData.suppliers.length > 0) {
-            const cloudStr = JSON.stringify(cloudData.suppliers);
+            const filtered = filterDeleted(cloudData.suppliers);
+            const cloudStr = JSON.stringify(filtered);
             const localStr = JSON.stringify(suppliers || []);
             if (cloudStr !== localStr) {
-                suppliers = cloudData.suppliers;
+                suppliers = filtered;
                 safeSetItem('suppliers', JSON.stringify(suppliers));
                 hasChanges = true;
             }
         }
         if (cloudData.contracts && cloudData.contracts.length > 0) {
-            const cloudStr = JSON.stringify(cloudData.contracts);
+            const filtered = filterDeleted(cloudData.contracts);
+            const cloudStr = JSON.stringify(filtered);
             const localStr = JSON.stringify(contracts || []);
             if (cloudStr !== localStr) {
-                contracts = cloudData.contracts;
+                contracts = filtered;
                 safeSetItem('contracts', JSON.stringify(contracts));
                 hasChanges = true;
             }
         }
         if (cloudData.invoices && cloudData.invoices.length > 0) {
-            const cloudStr = JSON.stringify(cloudData.invoices);
+            const filtered = filterDeleted(cloudData.invoices);
+            const cloudStr = JSON.stringify(filtered);
             const localStr = JSON.stringify(invoices || []);
             if (cloudStr !== localStr) {
-                invoices = cloudData.invoices;
+                invoices = filtered;
                 safeSetItem('invoices', JSON.stringify(invoices));
                 hasChanges = true;
             }
         }
         if (cloudData.payments && cloudData.payments.length > 0) {
-            const cloudStr = JSON.stringify(cloudData.payments);
+            const filtered = filterDeleted(cloudData.payments);
+            const cloudStr = JSON.stringify(filtered);
             const localStr = JSON.stringify(payments || []);
             if (cloudStr !== localStr) {
-                payments = cloudData.payments;
+                payments = filtered;
                 safeSetItem('payments', JSON.stringify(payments));
                 hasChanges = true;
             }
         }
         if (cloudData.inquiry_records && cloudData.inquiry_records.length > 0) {
-            const cloudStr = JSON.stringify(cloudData.inquiry_records);
+            const filtered = filterDeleted(cloudData.inquiry_records);
+            const cloudStr = JSON.stringify(filtered);
             const localStr = JSON.stringify(inquiryRecords || []);
             if (cloudStr !== localStr) {
-                inquiryRecords = cloudData.inquiry_records;
+                inquiryRecords = filtered;
                 safeSetItem('inquiryRecords', JSON.stringify(inquiryRecords));
                 hasChanges = true;
             }
         }
         if (cloudData.tracking_history && cloudData.tracking_history.length > 0) {
-            const cloudStr = JSON.stringify(cloudData.tracking_history);
+            const filtered = filterDeleted(cloudData.tracking_history);
+            const cloudStr = JSON.stringify(filtered);
             const localStr = JSON.stringify(trackingHistory || []);
             if (cloudStr !== localStr) {
-                trackingHistory = cloudData.tracking_history;
+                trackingHistory = filtered;
                 safeSetItem('trackingHistory', JSON.stringify(trackingHistory));
                 try { localStorage.setItem('trackingHistory', JSON.stringify(trackingHistory)); } catch(e) {}
                 hasChanges = true;
