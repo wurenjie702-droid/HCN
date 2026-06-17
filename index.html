@@ -7296,6 +7296,11 @@ Content-Type: application/json</pre>
             });
             safeSetItem('cloudDeletedMeta', JSON.stringify(cloudDeletedMeta));
             safeSetItem('cloudDeletedMetaUpdatedAt', String(cloudDeletedMetaUpdatedAt));
+            // 同时写入localStorage，确保hydrateCloudDeletedCache()能正确读取
+            try {
+                localStorage.setItem('cloudDeletedMeta', JSON.stringify(cloudDeletedMeta));
+                localStorage.setItem('cloudDeletedMetaUpdatedAt', String(cloudDeletedMetaUpdatedAt));
+            } catch(e) {}
         }
 
         function hydrateCloudDeletedCache() {
@@ -9009,20 +9014,44 @@ Content-Type: application/json</pre>
                 showSyncStatus('syncing');
                 try {
                     const workerUrl = (localStorage.getItem('cfWorkerUrl') || DEFAULT_CF_WORKER_URL).replace(/\/+$/, '');
+                    // 过滤掉已软删除的记录，防止覆盖云端删除状态
+                    const _cfDeletedIds = new Set([
+                        ...deletedCustomers.map(i => i.id),
+                        ...deletedShipments.map(i => i.id),
+                        ...deletedBusinessOrders.map(i => i.id),
+                        ...deletedContainerOrders.map(i => i.id),
+                        ...deletedWarehouseEntries.map(i => i.id),
+                        ...deletedOutboundEntries.map(i => i.id)
+                    ].filter(Boolean));
+                    function _cfFilterDeleted(list) {
+                        if (!Array.isArray(list)) return list || [];
+                        return list.filter(item => {
+                            if (!item) return false;
+                            if (item.deletedAt || item.deleted_at || item.deleteType === 'soft' || item.deleteType === 'hard') return false;
+                            if (item.id && _cfDeletedIds.has(item.id)) return false;
+                            return true;
+                        });
+                    }
                     const syncPayload = {
-                        customers: customers || [],
-                        shipments: shipments || [],
-                        trackingHistory: trackingHistory || [],
-                        businessOrders: businessOrders || [],
-                        containerOrders: containerOrders || [],
-                        warehouseEntries: warehouseEntries || [],
-                        outboundEntries: outboundEntries || [],
-                        suppliers: suppliers || [],
-                        contracts: contracts || [],
-                        invoices: invoices || [],
-                        payments: payments || [],
-                        inquiryRecords: inquiryRecords || [],
-                        settings: [settings || {}]
+                        customers: _cfFilterDeleted(customers),
+                        shipments: _cfFilterDeleted(shipments),
+                        trackingHistory: _cfFilterDeleted(trackingHistory),
+                        businessOrders: _cfFilterDeleted(businessOrders),
+                        containerOrders: _cfFilterDeleted(containerOrders),
+                        warehouseEntries: _cfFilterDeleted(warehouseEntries),
+                        outboundEntries: _cfFilterDeleted(outboundEntries),
+                        suppliers: _cfFilterDeleted(suppliers),
+                        contracts: _cfFilterDeleted(contracts),
+                        invoices: _cfFilterDeleted(invoices),
+                        payments: _cfFilterDeleted(payments),
+                        inquiryRecords: _cfFilterDeleted(inquiryRecords),
+                        settings: [settings || {}],
+                        deletedCustomers: deletedCustomers || [],
+                        deletedShipments: deletedShipments || [],
+                        deletedBusinessOrders: deletedBusinessOrders || [],
+                        deletedContainerOrders: deletedContainerOrders || [],
+                        deletedWarehouseEntries: deletedWarehouseEntries || [],
+                        deletedOutboundEntries: deletedOutboundEntries || []
                     };
                     const res = await fetch(`${workerUrl}/api/sync`, {
                         method: 'POST',
@@ -24336,7 +24365,7 @@ PORT=3000</pre>
             ];
             
             const results = await Promise.all(loadPromises);
-            
+
             shipments = results[0] || [];
             customers = results[1] || [];
             trackingHistory = results[2] || [];
@@ -24374,7 +24403,37 @@ PORT=3000</pre>
             };
             ensureCustomOrderOptions();
             settings = { ...defaultSettings, ...settings };
-            
+
+            // 过滤掉已软删除的记录，防止本地缓存过期导致删除数据恢复
+            const _deletedCustomerIds = new Set(deletedCustomers.map(item => item.id).filter(Boolean));
+            const _deletedShipmentIds = new Set(deletedShipments.map(item => item.id).filter(Boolean));
+            const _deletedBusinessOrderIds = new Set(deletedBusinessOrders.map(item => item.id).filter(Boolean));
+            const _deletedContainerOrderIds = new Set(deletedContainerOrders.map(item => item.id).filter(Boolean));
+            const _deletedWarehouseEntryIds = new Set(deletedWarehouseEntries.map(item => item.id).filter(Boolean));
+            const _deletedOutboundEntryIds = new Set(deletedOutboundEntries.map(item => item.id).filter(Boolean));
+            function _isSoftDeleted(item) {
+                return item && (item.deletedAt || item.deleted_at || item.deleteType === 'soft' || item.deleteType === 'hard');
+            }
+            function _filterDeleted(list, deletedIdSet) {
+                if (!Array.isArray(list)) return list;
+                return list.filter(item => {
+                    if (_isSoftDeleted(item)) return false;
+                    if (item && item.id && deletedIdSet.has(item.id)) return false;
+                    return true;
+                });
+            }
+            customers = _filterDeleted(customers, _deletedCustomerIds);
+            shipments = _filterDeleted(shipments, _deletedShipmentIds);
+            orders = _filterDeleted(orders, new Set());
+            businessOrders = _filterDeleted(businessOrders, _deletedBusinessOrderIds);
+            containerOrders = _filterDeleted(containerOrders, _deletedContainerOrderIds);
+            warehouseEntries = _filterDeleted(warehouseEntries, _deletedWarehouseEntryIds);
+            outboundEntries = _filterDeleted(outboundEntries, _deletedOutboundEntryIds);
+            suppliers = _filterDeleted(suppliers, new Set());
+            contracts = _filterDeleted(contracts, new Set());
+            invoices = _filterDeleted(invoices, new Set());
+            payments = _filterDeleted(payments, new Set());
+
             const currentProvider = localStorage.getItem('db_provider') || localStorage.getItem('dbProvider') || 'cloudflare';
             if (currentProvider === 'cloudflare' && settings.cloudSyncEnabled === false) {
                 settings.cloudSyncEnabled = true;
@@ -24424,7 +24483,37 @@ PORT=3000</pre>
             };
             ensureCustomOrderOptions();
             settings = { ...defaultSettings, ...settings };
-            
+
+            // 过滤掉已软删除的记录，防止本地缓存过期导致删除数据恢复
+            const _lsDeletedCustomerIds = new Set(deletedCustomers.map(item => item.id).filter(Boolean));
+            const _lsDeletedShipmentIds = new Set(deletedShipments.map(item => item.id).filter(Boolean));
+            const _lsDeletedBusinessOrderIds = new Set(deletedBusinessOrders.map(item => item.id).filter(Boolean));
+            const _lsDeletedContainerOrderIds = new Set(deletedContainerOrders.map(item => item.id).filter(Boolean));
+            const _lsDeletedWarehouseEntryIds = new Set(deletedWarehouseEntries.map(item => item.id).filter(Boolean));
+            const _lsDeletedOutboundEntryIds = new Set(deletedOutboundEntries.map(item => item.id).filter(Boolean));
+            function _lsIsSoftDeleted(item) {
+                return item && (item.deletedAt || item.deleted_at || item.deleteType === 'soft' || item.deleteType === 'hard');
+            }
+            function _lsFilterDeleted(list, deletedIdSet) {
+                if (!Array.isArray(list)) return list;
+                return list.filter(item => {
+                    if (_lsIsSoftDeleted(item)) return false;
+                    if (item && item.id && deletedIdSet.has(item.id)) return false;
+                    return true;
+                });
+            }
+            customers = _lsFilterDeleted(customers, _lsDeletedCustomerIds);
+            shipments = _lsFilterDeleted(shipments, _lsDeletedShipmentIds);
+            orders = _lsFilterDeleted(orders, new Set());
+            businessOrders = _lsFilterDeleted(businessOrders, _lsDeletedBusinessOrderIds);
+            containerOrders = _lsFilterDeleted(containerOrders, _lsDeletedContainerOrderIds);
+            warehouseEntries = _lsFilterDeleted(warehouseEntries, _lsDeletedWarehouseEntryIds);
+            outboundEntries = _lsFilterDeleted(outboundEntries, _lsDeletedOutboundEntryIds);
+            suppliers = _lsFilterDeleted(suppliers, new Set());
+            contracts = _lsFilterDeleted(contracts, new Set());
+            invoices = _lsFilterDeleted(invoices, new Set());
+            payments = _lsFilterDeleted(payments, new Set());
+
             const currentProviderLS = localStorage.getItem('db_provider') || localStorage.getItem('dbProvider') || 'cloudflare';
             if (currentProviderLS === 'cloudflare' && settings.cloudSyncEnabled === false) {
                 settings.cloudSyncEnabled = true;
